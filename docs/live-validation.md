@@ -25,3 +25,5 @@ Automated regression suite: 34 tests passed locally. Tests cover baseline treatm
 Longitudinal SKU stability and future source coverage remain observational limitations. A synthetic test proves URL/address changes do not change identity; it does not prove Century will never reassign SKUs.
 
 GitHub Actions: initial Validate tracker run passed; manual Daily listing flow run [37254756947](https://github.com/aregaladosantiago-hub/century-complete-listing-tracker/actions/runs/37254756947) completed successfully and committed the 2026-10-04 baseline (839 active).
+
+Final workflow verification: manual run [37255193527](https://github.com/aregaladosantiago-hub/century-complete-listing-tracker/actions/runs/37255193527) passed all 34 tests and preserved the same-day snapshot without a data commit.

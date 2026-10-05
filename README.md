@@ -39,4 +39,4 @@ python -m century_tracker.run
 
 The **Daily listing flow** GitHub Actions workflow runs at **12:30 UTC daily** (07:30 Central daylight time / 06:30 Central standard time) and supports **Run workflow** manual dispatch. Dates use America/Chicago. Runs are serialized; the first accepted observation each day is immutable. Updated data and reports are committed only when changed. Rejected runs commit failure evidence and report failure in Actions, preserving the previous accepted inventory.
 
-See [source investigation](docs/source-investigation.md), [methodology](docs/methodology.md), and [live validation](docs/live-validation.md) for scope and limitations.
+See [implementation handoff](docs/handoff.md), [source investigation](docs/source-investigation.md), [methodology](docs/methodology.md), and [live validation](docs/live-validation.md) for scope and limitations.
