@@ -1,0 +1,39 @@
+name: Daily listing flow
+on:
+  schedule:
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+concurrency:
+  group: listing-data-main
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  collect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Test accounting and source validation
+        run: python -m unittest discover -s tests -v
+      - name: Collect daily inventory
+        id: capture
+        continue-on-error: true
+        run: python -m century_tracker.run
+      - name: Commit observations and reports
+        if: always() && steps.capture.outcome != 'skipped'
+        run: |
+          git config user.name "listing-tracker-bot"
+          git config user.email "listing-tracker-bot@users.noreply.github.com"
+          git add data reports
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Update Century Complete listing observations"
+          git push origin HEAD:main
+      - name: Report rejected capture
+        if: steps.capture.outcome == 'failure'
+        run: exit 1
