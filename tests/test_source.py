@@ -1,7 +1,7 @@
 import json
 import unittest
 from pathlib import Path
-from century_tracker.source import directory, parse_community, map_rows
+from century_tracker.source import directory, parse_community, map_rows, detail_availability
 from century_tracker.engine import HealthError
 
 FIX=Path(__file__).parent/'fixtures'
@@ -44,3 +44,30 @@ class SourceTests(unittest.TestCase):
     def test_lot_change_detected(self):
         text=(FIX/'available.html').read_text().replace('Lot 10503','Lot 10504')
         with self.assertRaises(HealthError):parse_community(C,text,{})
+
+    def detail(self, sku='00011062_10503_CMP', amount='$168,990', flag='', buy=True):
+        return ('<div class="product_detail_contain" data-template="ProductDetailCommercePage_Lot" '
+                f'data-product-id="{sku}"><span class="gallery_flags_icon">{flag}</span>'
+                f'<p class="price">{amount}</p></div><nav class="sticky_footer_contain">'+
+                (f'<a href="/buy-online/emailverification2/?sku={sku}">Buy Now</a>' if buy else '')+'</nav>')
+
+    def test_missing_card_button_confirmed_by_matching_detail(self):
+        text=(FIX/'available.html').read_text().replace('Buy Now','View Details')
+        r=parse_community(C,text,{},lambda sku,url:self.detail())[0]
+        self.assertTrue(r['active'])
+        self.assertEqual(r['source'],'community_card_detail_confirmed')
+
+    def test_detail_identity_price_and_unknown_status_fail_closed(self):
+        sku='00011062_10503_CMP'
+        for detail in [self.detail(sku='other_CMP'),self.detail(amount='$1'),self.detail(buy=False),
+                       self.detail(flag='Pending'),self.detail().replace('?sku='+sku,'?sku=other_CMP')]:
+            with self.subTest(detail=detail),self.assertRaises(HealthError):
+                detail_availability(detail,sku,16899000)
+
+    def test_detail_pending_does_not_use_stale_structured_stock(self):
+        detail=self.detail(flag='Pending',buy=False)+'<script>{"availability":"InStock"}</script>'
+        self.assertEqual(detail_availability(detail,'00011062_10503_CMP',16899000),'Pending')
+
+    def test_available_card_does_not_need_detail_fetch(self):
+        def unexpected(*args): raise AssertionError('Unexpected detail request')
+        self.assertTrue(parse_community(C,(FIX/'available.html').read_text(),{},unexpected)[0]['active'])

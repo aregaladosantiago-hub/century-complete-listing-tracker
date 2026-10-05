@@ -9,7 +9,7 @@ import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, parse_qs
 from bs4 import BeautifulSoup, SoupStrainer
 from .engine import HealthError, price
 
@@ -66,7 +66,36 @@ def map_rows(payload):
     return lots,communities
 
 
-def parse_community(c, text, lots):
+def detail_availability(text, sku, expected_price):
+    """Resolve a missing card purchase button using the same home's detail page."""
+    soup=BeautifulSoup(text,'html.parser')
+    products=soup.select('.product_detail_contain[data-template="ProductDetailCommercePage_Lot"]')
+    if len(products)!=1 or products[0].get('data-product-id')!=sku:
+        raise HealthError(f'Detail identity mismatch: {sku}')
+    product=products[0]
+    flags=[x.get_text(' ',strip=True).casefold() for x in product.select('.gallery_flags_icon,.lot-status-icon')]
+    status=next((v for v in sorted(CONTRACTED) if v.casefold() in flags),None)
+    buy=False
+    for a in soup.select('.product_detail_contain a[href],nav.sticky_footer_contain a[href]'):
+        if a.get_text(' ',strip=True)!='Buy Now':
+            continue
+        target=urlparse(urljoin(BASE,a['href']))
+        if target.hostname!='www.centurycommunities.com' or parse_qs(target.query).get('sku')!=[sku]:
+            raise HealthError(f'Detail purchase identity mismatch: {sku}')
+        buy=True
+    if status:
+        if buy:
+            raise HealthError(f'Conflicting detail availability: {sku}')
+        return status
+    if not buy:
+        raise HealthError(f'Unrecognized detail availability: {sku}')
+    displayed=product.select_one('.price')
+    if displayed is None or expected_price is None or price(displayed.get_text(strip=True))!=expected_price:
+        raise HealthError(f'Detail advertised price disagreement: {sku}')
+    return 'Available'
+
+
+def parse_community(c, text, lots, detail_loader=None):
     items={}
     for raw in re.findall(r'data-ga-onload-event="([^"]+)"',text):
         event=json.loads(html.unescape(raw))
@@ -107,19 +136,23 @@ def parse_community(c, text, lots):
             if buy:
                 raise HealthError(f'Conflicting card/map availability: {sku}')
             status=mapped['LotStatus']
-        if not status and not buy:
-            raise HealthError(f'Unrecognized home availability: {sku}')
-        status=status or 'Available'
         displayed=card.select_one('.starting-price .price')
         shown=displayed.get_text(strip=True) if displayed else ''
         card_price=None if shown in ('','Call for Available Homes') else price(shown)
+        confirmed=False
+        if not status and not buy:
+            if detail_loader is None:
+                raise HealthError(f'Unrecognized home availability: {sku}')
+            status=detail_availability(detail_loader(sku,url),sku,card_price)
+            confirmed=True
+        status=status or 'Available'
         if status=='Available' and (card_price!=price(item['price']) or card_price!=price(card.get('data-price'))):
             raise HealthError(f'Advertised price disagreement: {sku}')
         rows.append(dict(home_key=sku,listing_id=sku,brand='CMP',community_id=parts[0],
                          address=match[1].strip(),lot=parts[1],community=item['item_category4'],
                          url=url,status=status,active=status=='Available',price_cents=card_price,
                          state=item['item_category'],market=item['item_category']+'/'+item['item_category2'],
-                         source='community_card',directory_id=str(c['communityId'])))
+                         source='community_card_detail_confirmed' if confirmed else 'community_card',directory_id=str(c['communityId'])))
     return rows
 
 
@@ -155,7 +188,8 @@ def collect(raw_dir, fixture=None):
         name='community-'+str(c['communityId'])+'.html'
         cached=raw_dir/(name+'.gz')
         data=gzip.decompress(cached.read_bytes()) if cached.exists() else obtain(name,urljoin(BASE,c['url']))
-        return parse_community(c,data.decode(),lots)
+        return parse_community(c,data.decode(),lots,
+                               lambda sku,url: obtain('detail-'+sku+'.html',url).decode())
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         groups=list(pool.map(one,cs))
     rows=[r for group in groups for r in group]

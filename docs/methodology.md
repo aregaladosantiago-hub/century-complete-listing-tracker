@@ -41,3 +41,8 @@ If a gate trips, inspect the failed run receipt and compressed evidence, compare
 Receipts preserve response URL, retrieval time, byte length and original SHA-256. Successful raw archives retain the exact relevant card attributes, labels, prices, links and commerce items, plus map fields used in parsing. Marketing text and image payloads are omitted to control repository growth. Snapshots and source receipts remain dated; there is no retention deletion job.
 
 A publication-ready marker is written only after all intended outputs are saved; an unexpected output-writing failure prevents the workflow from committing partial files. GitHub commits are the publication boundary: data, state and reports are committed together. A push rejected by concurrent changes fails visibly; it never force-pushes. Scheduled GitHub execution is best effort, may be delayed, and public-repository schedules can be disabled after inactivity. Monitor Actions status and repository activity. Source APIs are undocumented and may change.
+
+
+### Missing purchase buttons
+
+If a community card has no explicit contracted status and no Buy Now button, the collector checks that home's detail page. It requires the matching product SKU and either an explicit contracted status or a matching-SKU Buy Now link with the same advertised price. Marketing slogans and structured `InStock` values alone do not establish availability. Contradictory or unrecognized detail evidence rejects the capture. Detail HTML and a timestamped receipt are retained with the run evidence.
