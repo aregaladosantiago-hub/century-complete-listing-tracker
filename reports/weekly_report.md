@@ -1,6 +1,6 @@
 # Century Complete Listing Flow Tracker
 
-Last successful observation: 2026-10-04. Report as of 2026-10-04.
+Last successful observation: 2026-10-04. Report as of 2026-10-05.
 
 | Week | Period | Active | Added | Removed | Net Change | Removal ASP |
 |---|---|---:|---:|---:|---:|---:|

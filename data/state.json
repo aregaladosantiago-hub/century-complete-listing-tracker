@@ -551,6 +551,15 @@
       "removal_asp": "",
       "removed": "",
       "scrape_status": "baseline"
+    },
+    {
+      "active": "",
+      "added": "",
+      "date": "2026-10-05",
+      "net_change": "",
+      "removal_asp": "",
+      "removed": "",
+      "scrape_status": "failed"
     }
   ],
   "events": [],
