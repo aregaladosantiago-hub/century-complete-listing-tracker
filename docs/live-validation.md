@@ -20,6 +20,8 @@
 
 Nationwide community-card cross-check: 163/163 pages; 915/915 cards matched structured commerce items; 839 unique active SKUs and 76 Pending; all 839 active prices valid. No active duplicates. The map feed had duplicate geometries but no contradictory home fields.
 
-Automated regression suite: 31 tests passed locally. Tests cover baseline treatment, identity continuity, additions, explicit removals, disappearance confirmation, failed/partial captures, reappearances and repeated cycles, frozen history, missing weeks, malformed/missing prices, last available prices, weighted QTD pricing, CSV formatting, national directory completeness, brand isolation, card counts, and map/card conflicts.
+Automated regression suite: 34 tests passed locally. Tests cover baseline treatment, identity continuity, additions, explicit removals, disappearance confirmation, failed/partial captures, reappearances and repeated cycles, frozen history, missing weeks, malformed/missing prices, last available prices, weighted QTD pricing, CSV formatting, national directory completeness, brand isolation, card counts, and map/card conflicts.
 
 Longitudinal SKU stability and future source coverage remain observational limitations. A synthetic test proves URL/address changes do not change identity; it does not prove Century will never reassign SKUs.
+
+GitHub Actions: initial Validate tracker run passed; manual Daily listing flow run [37254756947](https://github.com/aregaladosantiago-hub/century-complete-listing-tracker/actions/runs/37254756947) completed successfully and committed the 2026-10-04 baseline (839 active).

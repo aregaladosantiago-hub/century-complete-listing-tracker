@@ -22,12 +22,15 @@ def main():
     parser.add_argument('--root',default='.')
     args=parser.parse_args()
     root=Path(args.root)
+    ready=root/'.publish-ready'
+    ready.unlink(missing_ok=True)
     now=datetime.now(timezone.utc)
     day=now.astimezone(ZoneInfo('America/Chicago')).date().isoformat()
     run_id=now.strftime('%Y%m%dT%H%M%S%fZ')
     state_path=root/'data/state.json'
     state=json.loads(state_path.read_text()) if state_path.exists() else empty_state()
     if state['last_success']==day:
+        ready.write_text('unchanged\n')
         print(f'{day}: already captured; daily observation is immutable')
         return 0
     raw=root/'data/raw'/run_id
@@ -40,6 +43,7 @@ def main():
         save_json(root/'data/runs'/f'{run_id}.json',manifest)
         save_json(state_path,failure(state,day,str(exc)))
         reports(failure(state,day,str(exc)),root/'reports',day)
+        ready.write_text(run_id+' rejected\n')
         print(f'Capture rejected: {exc}',file=sys.stderr)
         return 1
     snapshot=[]
@@ -54,6 +58,7 @@ def main():
     reports(updated,root/'reports',day)
     manifest.update(status='success',active=coverage['observed_active'],rows=len(rows),finished_at=datetime.now(timezone.utc).isoformat())
     save_json(root/'data/runs'/f'{run_id}.json',manifest)
+    ready.write_text(run_id+' accepted\n')
     print(f"{day}: accepted {len(rows)} observations; {coverage['observed_active']} available homes")
     return 0
 
