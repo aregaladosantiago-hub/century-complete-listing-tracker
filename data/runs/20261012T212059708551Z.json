@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-12",
+  "error": "HealthError: Community directory contracted; review required: ['1073745169', '1073745255', '1073745641']",
+  "run_id": "20261012T212059708551Z",
+  "source_version": 1,
+  "started_at": "2026-10-12T21:20:59.708551+00:00",
+  "status": "failed"
+}
