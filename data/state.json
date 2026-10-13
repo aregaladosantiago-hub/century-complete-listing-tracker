@@ -617,6 +617,15 @@
       "removal_asp": "296366.77",
       "removed": 13,
       "scrape_status": "success"
+    },
+    {
+      "active": "",
+      "added": "",
+      "date": "2026-10-13",
+      "net_change": "",
+      "removal_asp": "",
+      "removed": "",
+      "scrape_status": "failed"
     }
   ],
   "events": [
