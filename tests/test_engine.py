@@ -13,7 +13,8 @@ def home(key='0001_01_CMP', amount=25000000, status='Available', **kwargs):
 
 
 def coverage():
-    return dict(complete=True,communities=163,map_lots=11000,observed_active=839,markets={'FL/Panhandle':100},community_ids=['1','2'])
+    return dict(complete=True,communities=163,map_lots=11000,observed_active=839,markets={'FL/Panhandle':100},
+                community_ids=['1','2'],community_counts={'1':1,'2':0})
 
 
 class AccountingTests(unittest.TestCase):
@@ -51,10 +52,16 @@ class AccountingTests(unittest.TestCase):
         s=self.step(self.start(),'2026-10-02',[r]);self.assertEqual(s['events'],[])
     def test_failed_and_partial_capture_cannot_mutate(self):
         s=self.start();old=copy.deepcopy(s)
-        for field,value in [('complete',False),('observed_active',1),('communities',1),('map_lots',1),('markets',{}),('community_ids',['1'])]:
+        for field,value in [('complete',False),('observed_active',1),('communities',1),('map_lots',1),('markets',{}),('community_ids',['2'])]:
             c=coverage();c[field]=value
             with self.subTest(field=field),self.assertRaises(HealthError):advance(s,'2026-10-02',[],c)
             self.assertEqual(s,old)
+    def test_empty_retired_community_does_not_reject_capture(self):
+        s=self.start();c=coverage();c['community_ids']=['1']
+        self.assertEqual(advance(s,'2026-10-02',[home()],c)['last_success'],'2026-10-02')
+        c=coverage();c['community_ids']=['2']
+        with self.assertRaisesRegex(HealthError,'Community directory contracted'):
+            advance(s,'2026-10-02',[home()],c)
     def test_duplicate_and_wrong_brand_rejected(self):
         for rows in ([home(),home()],[dict(home(),brand='CCS')],[home(),dict(home('0001_02_CMP'),address=home()['address'])]):
             with self.assertRaises(HealthError):self.start(rows)

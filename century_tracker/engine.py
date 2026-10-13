@@ -66,7 +66,15 @@ def validate_coverage(rows, coverage, previous):
         for community, old in previous.get('community_counts', {}).items():
             if old >= 5 and coverage.get('community_counts', {}).get(community, 0) < old * .5:
                 raise HealthError(f'Abnormal community coverage decline: {community}')
-        missing = set(previous['community_ids']) - set(coverage['community_ids'])
+        # A community with no observed homes can legitimately disappear when
+        # Century retires an empty directory entry.  That cannot create false
+        # listing removals, so only fail closed when a missing community had
+        # inventory in the last accepted capture.
+        previous_counts = previous.get('community_counts', {})
+        missing = {
+            community for community in set(previous['community_ids']) - set(coverage['community_ids'])
+            if previous_counts.get(community) != 0
+        }
         if missing:
             raise HealthError(f'Community directory contracted; review required: {sorted(missing)}')
 
