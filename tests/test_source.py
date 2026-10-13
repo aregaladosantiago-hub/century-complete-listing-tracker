@@ -24,9 +24,28 @@ class SourceTests(unittest.TestCase):
     def test_mixed_brand_rejected(self):
         text=(FIX/'available.html').read_text().replace('Century Complete','Century Communities')
         with self.assertRaises(HealthError):parse_community(C,text,{})
+    def test_traditional_brand_card_and_directory(self):
+        text=(FIX/'available.html').read_text().replace('Century Complete','Century Communities').replace('_CMP','_CCS')
+        row=parse_community(C,text,{},brand='CCS')[0]
+        self.assertEqual(row['brand'],'CCS');self.assertEqual(row['home_key'],'00011062_10503_CCS')
+        cs=[dict(communityId=i,company='Century Communities') for i in range(150)]
+        payload=dict(communities=cs,total=150,showLoadMore=False,relaxedMatch=False)
+        self.assertEqual(len(directory(payload,brand='CCS')),150)
     def test_hidden_numeric_price_cannot_replace_advertised(self):
         text=(FIX/'available.html').read_text().replace('$168,990','$199,990')
         with self.assertRaises(HealthError):parse_community(C,text,{})
+    def test_whole_dollar_display_accepts_source_rounding_cents(self):
+        text=(FIX/'available.html').read_text().replace('168990','168989.96')
+        row=parse_community(C,text,{})[0]
+        self.assertEqual(row['price_cents'],16899000)
+        with self.assertRaises(HealthError):
+            parse_community(C,text.replace('168989.96','168980'),{})
+    def test_submit_an_offer_is_an_identity_bound_purchase_action(self):
+        text=(FIX/'available.html').read_text().replace('Buy Now','Submit An Offer').replace(
+            '/buy-online/emailverification2/?sku=','/bid-online/?sku=')
+        self.assertTrue(parse_community(C,text,{})[0]['active'])
+        with self.assertRaises(HealthError):
+            parse_community(C,text.replace('?sku=00011062_10503_CMP','?sku=other_CMP'),{})
     def test_unknown_availability_fails_closed(self):
         text=(FIX/'pending.html').read_text().replace('Pending','Waitlist')
         with self.assertRaises(HealthError):parse_community(C,text,{})
@@ -41,6 +60,12 @@ class SourceTests(unittest.TestCase):
             with self.assertRaises(HealthError):map_rows(dict(Type='FeatureCollection',Features=[dict(Properties=p)]))
     def test_conflicting_map_card_status_rejected(self):
         with self.assertRaises(HealthError):parse_community(C,(FIX/'available.html').read_text(),{'00011062_10503_CMP':{'LotStatus':'Pending'}})
+    def test_exact_detail_page_resolves_stale_map_conflict(self):
+        row=parse_community(C,(FIX/'available.html').read_text(),
+                            {'00011062_10503_CMP':{'LotStatus':'Pending'}},
+                            lambda sku,url:self.detail())[0]
+        self.assertTrue(row['active'])
+        self.assertEqual(row['source'],'community_card_detail_confirmed')
     def test_lot_change_detected(self):
         text=(FIX/'available.html').read_text().replace('Lot 10503','Lot 10504')
         with self.assertRaises(HealthError):parse_community(C,text,{})

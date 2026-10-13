@@ -44,14 +44,14 @@ def empty_state():
     return dict(version=1, last_success=None, first_date=None, homes={}, events=[], daily=[], weeks=[], coverage=None)
 
 
-def validate_coverage(rows, coverage, previous):
+def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
     if not coverage.get('complete'):
         raise HealthError('Incomplete source capture')
     ids = [r['home_key'] for r in rows]
     if len(ids) != len(set(ids)):
         raise HealthError('Duplicate physical homes')
-    if any(r.get('brand') != 'CMP' for r in rows):
-        raise HealthError('Non-Century Complete home')
+    if any(r.get('brand') != expected_brand for r in rows):
+        raise HealthError(f'Unexpected brand in {expected_brand} series')
     physical = [(r['community_id'], re.sub(r'\W', '', r['address'].lower())) for r in rows if r['active']]
     if len(physical) != len(set(physical)):
         raise HealthError('Multiple SKUs for the same address; identity review required')
@@ -79,12 +79,12 @@ def validate_coverage(rows, coverage, previous):
             raise HealthError(f'Community directory contracted; review required: {sorted(missing)}')
 
 
-def advance(state, day, rows, coverage):
+def advance(state, day, rows, coverage, expected_brand='CMP'):
     """Return new state; never mutate the accepted state on validation failure."""
     date.fromisoformat(day)
     if state['last_success'] and day <= state['last_success']:
         raise HealthError('Successful dates are immutable; no same-day replacement or backfill')
-    validate_coverage(rows, coverage, state['coverage'])
+    validate_coverage(rows, coverage, state['coverage'], expected_brand)
     s = copy.deepcopy(state)
     baseline = s['last_success'] is None
     s['first_date'] = s['first_date'] or day
@@ -181,7 +181,7 @@ def csv_text(fields, rows):
     return '\ufeff'+buf.getvalue()
 
 
-def reports(s, root, as_of):
+def reports(s, root, as_of, title='Century Complete Listing Flow Tracker'):
     root = Path(root);root.mkdir(parents=True, exist_ok=True)
     weeks = list(s['weeks'])
     if s['first_date']:
@@ -199,7 +199,7 @@ def reports(s, root, as_of):
     q=date.fromisoformat(as_of);q=q.replace(month=1+3*((q.month-1)//3),day=1)
     qm=metrics([e for e in s['events'] if q.isoformat()<=e['date']<=as_of and e['kind']=='removed'])
     write('qtd_pricing.csv','period_start as_of removed priced_removals removal_asp advertised_removed_value',[dict(period_start=q.isoformat(),as_of=as_of,**qm)])
-    lines=['# Century Complete Listing Flow Tracker','',f"Last successful observation: {s['last_success'] or 'none'}. Report as of {as_of}.",'',
+    lines=[f'# {title}','',f"Last successful observation: {s['last_success'] or 'none'}. Report as of {as_of}.",'',
            '| Week | Period | Active | Added | Removed | Net Change | Removal ASP |','|---|---|---:|---:|---:|---:|---:|']
     for w in weeks:
         vals=[w[k] if w[k]!='' else '—' for k in ('active','added','removed','net_change')]

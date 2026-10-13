@@ -65,6 +65,12 @@ class AccountingTests(unittest.TestCase):
     def test_duplicate_and_wrong_brand_rejected(self):
         for rows in ([home(),home()],[dict(home(),brand='CCS')],[home(),dict(home('0001_02_CMP'),address=home()['address'])]):
             with self.assertRaises(HealthError):self.start(rows)
+    def test_independent_traditional_brand_series(self):
+        row=dict(home('0001_01_CCS'),brand='CCS')
+        s=advance(empty_state(),'2026-10-01',[row],coverage(),expected_brand='CCS')
+        self.assertEqual(s['homes']['0001_01_CCS']['brand'],'CCS')
+        with self.assertRaises(HealthError):
+            advance(empty_state(),'2026-10-01',[row],coverage())
     def test_price_validation(self):
         self.assertEqual(price('$249,990.50'),24999050)
         for value in ('249,99','NaN','-250000','250k','1e6','1999/mo',True,'250000.001'):

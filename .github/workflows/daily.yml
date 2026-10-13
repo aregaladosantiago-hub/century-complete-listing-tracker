@@ -12,7 +12,7 @@ jobs:
   collect:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -21,20 +21,25 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Test accounting and source validation
         run: python -m unittest discover -s tests -v
-      - name: Collect daily inventory
-        id: capture
+      - name: Collect Century Complete inventory
+        id: capture_complete
         continue-on-error: true
-        run: python -m century_tracker.run
+        run: python -m century_tracker.run --brand CMP
+      - name: Collect Century Communities inventory
+        id: capture_communities
+        continue-on-error: true
+        run: python -m century_tracker.run --brand CCS
       - name: Commit observations and reports
-        if: always() && steps.capture.outcome != 'skipped'
+        if: always() && (steps.capture_complete.outcome != 'skipped' || steps.capture_communities.outcome != 'skipped')
         run: |
           test -f .publish-ready || { echo "Publication incomplete; preserving repository data"; exit 1; }
+          test -f .publish-ready-ccs || { echo "Century Communities publication incomplete; preserving repository data"; exit 1; }
           git config user.name "listing-tracker-bot"
           git config user.email "listing-tracker-bot@users.noreply.github.com"
           git add data reports
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Update Century Complete listing observations"
+          git commit -m "Update Century listing observations"
           git push origin HEAD:main
       - name: Report rejected capture
-        if: steps.capture.outcome == 'failure'
+        if: steps.capture_complete.outcome == 'failure' || steps.capture_communities.outcome == 'failure'
         run: exit 1

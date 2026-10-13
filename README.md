@@ -1,6 +1,6 @@
-# Century Complete Listing Flow Tracker
+# Century Listing Flow Tracker
 
-Tracks publicly visible Century Complete home inventory through daily observations and fixed weekly listing flow. Traditional Century Communities inventory is excluded.
+Tracks the two Century homebuilding brands as independent daily series: **Century Complete** and **Century Communities**. Each series has its own baseline, lifecycle state, snapshots, coverage checks, weekly periods and reports. Combined interpretation should preserve the brand split because product mix and advertised prices differ materially.
 
 | Metric | Definition |
 |---|---|
@@ -15,6 +15,8 @@ Removals are a sell-through/order proxy, not confirmed official contracts. Remov
 Weeks are fixed seven-day periods anchored to the first successful observation, matching the reference tracker. Closed rows remain frozen. Failed captures do not advance listing comparisons or manufacture daily observations; the next successful comparison spans the gap. Blank flow values mean no comparable data. Movements are counted as events, so two removal cycles for one home remain two auditable events.
 
 ## Outputs
+
+Century Complete retains the original paths below. Traditional Century Communities uses the same filenames under `reports/century_communities/` and stores its source data under `data/century_communities/`.
 
 - `reports/weekly_report.md` — headline weekly table and current week.
 - `reports/weekly_history.csv` — frozen history and current week, with completeness status.
@@ -34,9 +36,10 @@ Requires Python 3.12 and curl.
 ```sh
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
-python -m century_tracker.run
+python -m century_tracker.run --brand CMP
+python -m century_tracker.run --brand CCS
 ```
 
-The **Daily listing flow** GitHub Actions workflow runs at **12:30 UTC daily** (07:30 Central daylight time / 06:30 Central standard time) and supports **Run workflow** manual dispatch. Dates use America/Chicago. Runs are serialized; the first accepted observation each day is immutable. Updated data and reports are committed only when changed. Rejected runs commit failure evidence and report failure in Actions, preserving the previous accepted inventory.
+The **Daily listing flow** GitHub Actions workflow runs both independent brand series at **12:30 UTC daily** (07:30 Central daylight time / 06:30 Central standard time) and supports **Run workflow** manual dispatch. Dates use America/Chicago. Runs are serialized; the first accepted observation for each brand each day is immutable. Updated data and reports are committed only when changed. Rejected runs commit failure evidence and report failure in Actions, preserving the previous accepted inventory.
 
 See [implementation handoff](docs/handoff.md), [source investigation](docs/source-investigation.md), [methodology](docs/methodology.md), and [live validation](docs/live-validation.md) for scope and limitations.

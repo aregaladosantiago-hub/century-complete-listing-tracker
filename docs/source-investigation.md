@@ -15,4 +15,12 @@ The map alone is insufficient: only 510 Buy Now cards matched SpecModel map lots
 Detail-page JSON-LD is also insufficient for availability. Three sampled Pending pages still declared `https://schema.org/InStock` and retained a numeric offer price while visibly showing Pending, Call for Available Homes and no Buy Now link. The collector uses the visible status, validates public advertised prices and never uses JSON-LD InStock as availability evidence.
 
 The production collector uses direct HTTP with JSON parsing and narrow static HTML parsing. Browser execution is unnecessary. The map feed can take about a minute; requests have bounded retries and timeout limits. The website is not an official inventory census: unpublished homes, unsupported/new directory structures, short-lived intraday changes and off-site inventory cannot be guaranteed. National coverage means all communities returned by the tested public directory, not all physical homes Century owns.
+## Century Communities brand expansion
+
+Investigated the traditional Century Communities brand separately on 2026-10-12. The national directory accepts `brand=Century Communities`; the tested response returned 268 unique Century Communities entries with `total=268`, `showLoadMore=false` and `relaxedMatch=false`. Community pages use the same quick-move-in card and embedded commerce structures, with `item_brand=Century Communities` and stable-looking commerce SKUs ending in `_CCS`.
+
+The corresponding `brand=CCS` public map feed returned 39,293 lot features (36,789 unique lot SKUs in the accepted validation capture) and uses the same known status vocabulary. Traditional listings also exposed two supported patterns not present in the Complete fixtures: whole-dollar customer prices backed by source values containing cents, and an identity-bound `Submit An Offer` action. The collector accepts only mathematically consistent whole-dollar rounding and validates offer links against the exact SKU. A stale contracted map status must be resolved by the exact home's detail page.
+
+Historical, unreleased, model and homesite records remain supplemental evidence rather than available-inventory enumeration. The traditional brand is therefore collected as a separate series with independent state and reports. Its baseline does not imply historical additions or removals, and its public listings do not guarantee capture of offline, personalized or pre-listing sales.
+
 22a855c4667a07cc7702b9e4b06e1105c4d2bd74

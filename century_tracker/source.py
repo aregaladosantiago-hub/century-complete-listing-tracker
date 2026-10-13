@@ -14,10 +14,46 @@ from bs4 import BeautifulSoup, SoupStrainer
 from .engine import HealthError, price
 
 BASE = 'https://www.centurycommunities.com'
-DIRECTORY = BASE + '/api/search/findcommunities?brand=Century%20Complete&mapShown=true&seed=42'
-MAP = BASE + '/api/maps/geojson?brand=CMP'
+BRANDS = {
+    'CMP': dict(name='Century Complete', directory='Century%20Complete',
+                min_communities=100, min_map_lots=5000, min_active=300),
+    'CCS': dict(name='Century Communities', directory='Century%20Communities',
+                min_communities=150, min_map_lots=20000, min_active=300),
+}
 CONTRACTED = {'Pending','Reserved','Under Contract','Already Taken','Sold','Closed'}
 KNOWN = CONTRACTED | {'SpecModel','Unreleased','Model','Unavailable','Available HomeSite','Available','Under Construction','Move-In Ready','Hidden'}
+PURCHASE_ACTIONS = {'Buy Now':'/buy-online/','Submit An Offer':'/bid-online/'}
+
+
+def brand_config(brand):
+    try:
+        return BRANDS[brand]
+    except KeyError as exc:
+        raise HealthError(f'Unsupported brand: {brand}') from exc
+
+
+def advertised_price_agrees(displayed_text, source_value):
+    """Allow source cents that the whole-dollar customer display rounds away."""
+    displayed=price(displayed_text)
+    source=price(source_value)
+    if displayed is None or source is None:
+        return displayed==source
+    numeric=str(displayed_text).strip().replace('$','').replace(',','')
+    if '.' in numeric:
+        return displayed==source
+    return displayed==((source+50)//100)*100
+
+
+def is_purchase_link(anchor, sku):
+    label=anchor.get_text(' ',strip=True)
+    if label not in PURCHASE_ACTIONS:
+        return False
+    target=urlparse(urljoin(BASE,anchor.get('href','')))
+    if (target.hostname!='www.centurycommunities.com' or
+            not target.path.startswith(PURCHASE_ACTIONS[label]) or
+            parse_qs(target.query).get('sku')!=[sku]):
+        raise HealthError(f'Purchase identity mismatch: {sku}')
+    return True
 
 
 def fetch(url, headers=None):
@@ -30,24 +66,26 @@ def fetch(url, headers=None):
     return result.stdout
 
 
-def directory(payload):
+def directory(payload, brand='CMP'):
+    config=brand_config(brand)
     cs=payload['communities']
     if payload.get('relaxedMatch') or payload['showLoadMore'] or len(cs)!=payload['total']:
         raise HealthError('Directory pagination/count mismatch')
     if len({c['communityId'] for c in cs}) != len(cs):
         raise HealthError('Duplicate community directory entries')
-    if len(cs)<100 or any(c['company']!='Century Complete' for c in cs):
+    if len(cs)<config['min_communities'] or any(c['company']!=config['name'] for c in cs):
         raise HealthError('Implausible or mixed-brand directory')
     return cs
 
 
-def map_rows(payload):
+def map_rows(payload, brand='CMP'):
+    config=brand_config(brand)
     if payload.get('Type')!='FeatureCollection':
         raise HealthError('Map schema changed')
     lots={};communities={}
     for feature in payload['Features']:
         p=feature['Properties']
-        if p['Brand']!='CMP':
+        if p['Brand']!=brand:
             raise HealthError('Map returned another brand')
         if p['Type']=='Community':
             communities[p['CommunityId']]=p['Name']
@@ -56,12 +94,12 @@ def map_rows(payload):
         if p['LotStatus'] not in KNOWN:
             raise HealthError(f"Unrecognized status: {p['LotStatus']}")
         sku=p['LotSku']
-        if not sku or not sku.endswith('_CMP'):
+        if not sku or not sku.endswith('_'+brand):
             raise HealthError('Missing or invalid map home SKU')
         if sku in lots and any(lots[sku][k]!=p[k] for k in ('LotStatus','Price','IsPublished','AddressLine1','ViewDetailsUrl')):
             raise HealthError('Conflicting duplicate map features')
         lots[sku]=p
-    if len(lots)<5000:
+    if len(lots)<config['min_map_lots']:
         raise HealthError('Implausibly small national map response')
     return lots,communities
 
@@ -77,12 +115,7 @@ def detail_availability(text, sku, expected_price):
     status=next((v for v in sorted(CONTRACTED) if v.casefold() in flags),None)
     buy=False
     for a in soup.select('.product_detail_contain a[href],nav.sticky_footer_contain a[href]'):
-        if a.get_text(' ',strip=True)!='Buy Now':
-            continue
-        target=urlparse(urljoin(BASE,a['href']))
-        if target.hostname!='www.centurycommunities.com' or parse_qs(target.query).get('sku')!=[sku]:
-            raise HealthError(f'Detail purchase identity mismatch: {sku}')
-        buy=True
+        buy=is_purchase_link(a,sku) or buy
     if status:
         if buy:
             raise HealthError(f'Conflicting detail availability: {sku}')
@@ -95,7 +128,8 @@ def detail_availability(text, sku, expected_price):
     return 'Available'
 
 
-def parse_community(c, text, lots, detail_loader=None):
+def parse_community(c, text, lots, detail_loader=None, brand='CMP'):
+    config=brand_config(brand)
     items={}
     for raw in re.findall(r'data-ga-onload-event="([^"]+)"',text):
         event=json.loads(html.unescape(raw))
@@ -103,7 +137,7 @@ def parse_community(c, text, lots, detail_loader=None):
             continue
         for item in event['ecommerce']['items']:
             url=urljoin(BASE,item['location_id'])
-            if item['item_brand']!='Century Complete' or not item['item_id'].endswith('_CMP'):
+            if item['item_brand']!=config['name'] or not item['item_id'].endswith('_'+brand):
                 raise HealthError('Mixed-brand commerce item')
             if url in items:
                 raise HealthError('Duplicate commerce item URL')
@@ -131,24 +165,31 @@ def parse_community(c, text, lots, detail_loader=None):
         flags=[x.get_text(' ',strip=True) for x in card.select('.quick-icon')]
         status=next((v for v in sorted(CONTRACTED) if any(f.casefold()==v.casefold() for f in flags)),None)
         mapped=lots.get(sku)
-        buy=any(a.get_text(' ',strip=True)=='Buy Now' for a in card.select('.button-groups a'))
+        purchase_links=[is_purchase_link(a,sku) for a in card.select('.button-groups a')]
+        buy=any(purchase_links)
+        map_conflict=bool(mapped and mapped['LotStatus'] in CONTRACTED and buy)
         if mapped and mapped['LotStatus'] in CONTRACTED:
-            if buy:
-                raise HealthError(f'Conflicting card/map availability: {sku}')
-            status=mapped['LotStatus']
+            if not buy:
+                status=mapped['LotStatus']
         displayed=card.select_one('.starting-price .price')
         shown=displayed.get_text(strip=True) if displayed else ''
         card_price=None if shown in ('','Call for Available Homes') else price(shown)
         confirmed=False
-        if not status and not buy:
+        if map_conflict:
+            if detail_loader is None:
+                raise HealthError(f'Conflicting card/map availability: {sku}')
+            status=detail_availability(detail_loader(sku,url),sku,card_price)
+            confirmed=True
+        elif not status and not buy:
             if detail_loader is None:
                 raise HealthError(f'Unrecognized home availability: {sku}')
             status=detail_availability(detail_loader(sku,url),sku,card_price)
             confirmed=True
         status=status or 'Available'
-        if status=='Available' and (card_price!=price(item['price']) or card_price!=price(card.get('data-price'))):
+        if status=='Available' and (not advertised_price_agrees(shown,item['price']) or
+                                    not advertised_price_agrees(shown,card.get('data-price'))):
             raise HealthError(f'Advertised price disagreement: {sku}')
-        rows.append(dict(home_key=sku,listing_id=sku,brand='CMP',community_id=parts[0],
+        rows.append(dict(home_key=sku,listing_id=sku,brand=brand,community_id=parts[0],
                          address=match[1].strip(),lot=parts[1],community=item['item_category4'],
                          url=url,status=status,active=status=='Available',price_cents=card_price,
                          state=item['item_category'],market=item['item_category']+'/'+item['item_category2'],
@@ -156,8 +197,11 @@ def parse_community(c, text, lots, detail_loader=None):
     return rows
 
 
-def collect(raw_dir, fixture=None):
+def collect(raw_dir, fixture=None, brand='CMP'):
     """Save compressed source evidence before validating the candidate snapshot."""
+    config=brand_config(brand)
+    directory_url=BASE + f"/api/search/findcommunities?brand={config['directory']}&mapShown=true&seed=42"
+    map_url=BASE + f'/api/maps/geojson?brand={brand}'
     raw_dir=Path(raw_dir);raw_dir.mkdir(parents=True,exist_ok=True)
     def obtain(name,url,headers=None):
         if fixture:
@@ -171,8 +215,8 @@ def collect(raw_dir, fixture=None):
         (raw_dir/(name+'.gz')).write_bytes(gzip.compress(data,mtime=0))
         (raw_dir/(name+'.receipt.json')).write_text(json.dumps(dict(url=url,fetched_at=datetime.now(timezone.utc).isoformat(),sha256=hashlib.sha256(data).hexdigest(),bytes=len(data))))
         return data
-    initial=obtain('directory.json',DIRECTORY)
-    cs=directory(json.loads(initial))
+    initial=obtain('directory.json',directory_url)
+    cs=directory(json.loads(initial),brand)
     # Discover the public map key from the website, rather than hard-coding it.
     first=obtain('community-'+str(cs[0]['communityId'])+'.html',urljoin(BASE,cs[0]['url']))
     key=re.search(r'data-map-key="([^"]+)"',first.decode())
@@ -183,13 +227,13 @@ def collect(raw_dir, fixture=None):
             if key:break
     if not key:
         raise HealthError('Public map configuration missing')
-    lots,names=map_rows(json.loads(obtain('map.json',MAP,{'X-API-KEY':key[1]})))
+    lots,names=map_rows(json.loads(obtain('map.json',map_url,{'X-API-KEY':key[1]})),brand)
     def one(c):
         name='community-'+str(c['communityId'])+'.html'
         cached=raw_dir/(name+'.gz')
         data=gzip.decompress(cached.read_bytes()) if cached.exists() else obtain(name,urljoin(BASE,c['url']))
         return parse_community(c,data.decode(),lots,
-                               lambda sku,url: obtain('detail-'+sku+'.html',url).decode())
+                               lambda sku,url: obtain('detail-'+sku+'.html',url).decode(),brand)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         groups=list(pool.map(one,cs))
     rows=[r for group in groups for r in group]
@@ -197,12 +241,12 @@ def collect(raw_dir, fixture=None):
     for sku,p in lots.items():
         if sku in keys or p['LotStatus'] not in CONTRACTED:
             continue
-        rows.append(dict(home_key=sku,listing_id=sku,brand='CMP',community_id=p['CommunityId'],
+        rows.append(dict(home_key=sku,listing_id=sku,brand=brand,community_id=p['CommunityId'],
                          address=p['AddressLine1'] or '',lot=p['LotId'],community=names.get(p['CommunityId'],p['CommunityId']),
                          url=p['ViewDetailsUrl'] or '',status=p['LotStatus'],active=False,price_cents=price(p['Price']),
                          state=p['State'],market=p['State']+'/'+(p['MetroName'] or '').strip(),source='map',directory_id=''))
     if not fixture:
-        final=directory(json.loads(obtain('directory-end.json',DIRECTORY)))
+        final=directory(json.loads(obtain('directory-end.json',directory_url)),brand)
         if {c['communityId'] for c in final}!={c['communityId'] for c in cs}:
             raise HealthError('Directory changed during capture')
     # Preserve source fields used by the collector without daily image/marketing payloads.
@@ -220,7 +264,7 @@ def collect(raw_dir, fixture=None):
     map_fields=('LotSku','LotId','CommunityId','Brand','LotStatus','IsPublished','IsModelHome','IsQuickMoveIn','Price','AddressLine1','City','State','PostalCode','ViewDetailsUrl','ModifiedDate')
     (raw_dir/'map.json.gz').write_bytes(gzip.compress(json.dumps([dict((k,p[k]) for k in map_fields) for p in lots.values()]).encode(),mtime=0))
     active=[r for r in rows if r['active']]
-    if len(active)<300:
+    if len(active)<config['min_active']:
         raise HealthError('Implausibly small available inventory')
     coverage=dict(complete=True,communities=len(cs),community_ids=sorted(str(c['communityId']) for c in cs),
                   map_lots=len(lots),observed_active=len(active),cards=sum(map(len,groups)),
