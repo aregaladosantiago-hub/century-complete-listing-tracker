@@ -25,6 +25,15 @@ KNOWN = CONTRACTED | {'SpecModel','Unreleased','Model','Unavailable','Available 
 PURCHASE_ACTIONS = {'Buy Now':'/buy-online/','Submit An Offer':'/bid-online/'}
 
 
+class FetchError(HealthError):
+    def __init__(self, url, status=None, returncode=None):
+        self.url=url
+        self.status=status
+        self.returncode=returncode
+        reason=f'HTTP {status}' if status else f'curl exit {returncode}'
+        super().__init__(f'Source fetch failed ({reason}): {url}')
+
+
 def brand_config(brand):
     try:
         return BRANDS[brand]
@@ -56,13 +65,22 @@ def is_purchase_link(anchor, sku):
     return True
 
 
+def safe_empty_community(c, exc):
+    """A retired directory shell is empty only with two independent signals."""
+    return (isinstance(exc,FetchError) and exc.status in (404,410) and
+            c.get('quickMoveInAvailable') is False)
+
+
 def fetch(url, headers=None):
     if urlparse(url).hostname != 'www.centurycommunities.com':
         raise HealthError('Unexpected source host')
     cmd = ['curl','--fail','--silent','--show-error','--location','--max-time','180','--retry','2','--retry-delay','2',url]
     for name,value in (headers or {}).items():
         cmd.extend(['-H',f'{name}: {value}'])
-    result = subprocess.run(cmd, capture_output=True, check=True, timeout=560)
+    result = subprocess.run(cmd, capture_output=True, check=False, timeout=560)
+    if result.returncode:
+        match=re.search(rb'error:\s*(\d{3})',result.stderr)
+        raise FetchError(url,int(match[1]) if match else None,result.returncode)
     return result.stdout
 
 
@@ -215,23 +233,49 @@ def collect(raw_dir, fixture=None, brand='CMP'):
         (raw_dir/(name+'.gz')).write_bytes(gzip.compress(data,mtime=0))
         (raw_dir/(name+'.receipt.json')).write_text(json.dumps(dict(url=url,fetched_at=datetime.now(timezone.utc).isoformat(),sha256=hashlib.sha256(data).hexdigest(),bytes=len(data))))
         return data
+    missing_ids=set()
+    def community_page(c):
+        community_id=str(c['communityId'])
+        if community_id in missing_ids:
+            return None
+        name='community-'+community_id+'.html'
+        cached=raw_dir/(name+'.gz')
+        if cached.exists():
+            return gzip.decompress(cached.read_bytes())
+        url=urljoin(BASE,c['url'])
+        try:
+            return obtain(name,url)
+        except FetchError as exc:
+            if not safe_empty_community(c,exc):
+                raise
+            evidence=json.dumps(dict(url=url,http_status=exc.status,
+                                     directory_quick_move_in_available=False),sort_keys=True).encode()
+            missing_name='community-'+community_id+'.missing.json'
+            (raw_dir/(missing_name+'.gz')).write_bytes(gzip.compress(evidence,mtime=0))
+            (raw_dir/(name+'.receipt.json')).write_text(json.dumps(dict(
+                url=url,fetched_at=datetime.now(timezone.utc).isoformat(),http_status=exc.status,
+                sha256=hashlib.sha256(b'').hexdigest(),bytes=0)))
+            missing_ids.add(community_id)
+            return None
     initial=obtain('directory.json',directory_url)
     cs=directory(json.loads(initial),brand)
     # Discover the public map key from the website, rather than hard-coding it.
-    first=obtain('community-'+str(cs[0]['communityId'])+'.html',urljoin(BASE,cs[0]['url']))
-    key=re.search(r'data-map-key="([^"]+)"',first.decode())
+    first=community_page(cs[0])
+    key=re.search(r'data-map-key="([^"]+)"',first.decode()) if first else None
     if not key:
         for c in cs[1:]:
-            probe=obtain('community-'+str(c['communityId'])+'.html',urljoin(BASE,c['url']))
+            probe=community_page(c)
+            if probe is None:
+                continue
             key=re.search(r'data-map-key="([^"]+)"',probe.decode())
             if key:break
     if not key:
         raise HealthError('Public map configuration missing')
     lots,names=map_rows(json.loads(obtain('map.json',map_url,{'X-API-KEY':key[1]})),brand)
     def one(c):
-        name='community-'+str(c['communityId'])+'.html'
-        cached=raw_dir/(name+'.gz')
-        data=gzip.decompress(cached.read_bytes()) if cached.exists() else obtain(name,urljoin(BASE,c['url']))
+        data=community_page(c)
+        if data is None:
+            return []
         return parse_community(c,data.decode(),lots,
                                lambda sku,url: obtain('detail-'+sku+'.html',url).decode(),brand)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
@@ -268,6 +312,7 @@ def collect(raw_dir, fixture=None, brand='CMP'):
         raise HealthError('Implausibly small available inventory')
     coverage=dict(complete=True,communities=len(cs),community_ids=sorted(str(c['communityId']) for c in cs),
                   map_lots=len(lots),observed_active=len(active),cards=sum(map(len,groups)),
+                  unavailable_communities=sorted(missing_ids),
                   markets=dict(collections.Counter(r['market'] for r in active)),
                   community_counts={str(c['communityId']):len(g) for c,g in zip(cs,groups)},
                   source_hashes={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(raw_dir.glob('*.gz'))})

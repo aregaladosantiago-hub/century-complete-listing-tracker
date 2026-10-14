@@ -1,7 +1,10 @@
 import json
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
-from century_tracker.source import directory, parse_community, map_rows, detail_availability
+from century_tracker.source import (BASE, FetchError, detail_availability, directory, fetch,
+                                    map_rows, parse_community, safe_empty_community)
 from century_tracker.engine import HealthError
 
 FIX=Path(__file__).parent/'fixtures'
@@ -54,6 +57,20 @@ class SourceTests(unittest.TestCase):
         with self.assertRaises(HealthError):parse_community(C,text,{})
     def test_generic_error_page_not_zero_inventory(self):
         with self.assertRaises(HealthError):parse_community(C,'<html>Temporarily unavailable</html>',{})
+    def test_only_explicitly_empty_404_or_410_community_is_skippable(self):
+        empty=dict(C,quickMoveInAvailable=False)
+        self.assertTrue(safe_empty_community(empty,FetchError(BASE+'/missing',404,22)))
+        self.assertTrue(safe_empty_community(empty,FetchError(BASE+'/gone',410,22)))
+        for community,error in [(dict(C,quickMoveInAvailable=True),FetchError(BASE+'/missing',404,22)),
+                                (empty,FetchError(BASE+'/error',500,22)),
+                                (empty,HealthError('timeout'))]:
+            with self.subTest(community=community,error=error):
+                self.assertFalse(safe_empty_community(community,error))
+    def test_fetch_exposes_http_status_without_response_body(self):
+        result=SimpleNamespace(returncode=22,stdout=b'',stderr=b'curl: (22) The requested URL returned error: 404')
+        with patch('century_tracker.source.subprocess.run',return_value=result),self.assertRaises(FetchError) as caught:
+            fetch(BASE+'/missing')
+        self.assertEqual(caught.exception.status,404)
     def test_map_schema_unknown_status_and_wrong_brand(self):
         with self.assertRaises(HealthError):map_rows({'Type':'error'})
         for p in [dict(Type='Lot',Brand='CCS'),dict(Type='Lot',Brand='CMP',LotStatus='Mystery')]:

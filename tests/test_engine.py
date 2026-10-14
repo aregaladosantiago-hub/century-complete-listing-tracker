@@ -62,6 +62,13 @@ class AccountingTests(unittest.TestCase):
         c=coverage();c['community_ids']=['2']
         with self.assertRaisesRegex(HealthError,'Community directory contracted'):
             advance(s,'2026-10-02',[home()],c)
+    def test_unavailable_page_must_not_hide_previously_observed_cards(self):
+        s=self.start();c=coverage();c['unavailable_communities']=['1']
+        with self.assertRaisesRegex(HealthError,'Previously populated community page unavailable'):
+            advance(s,'2026-10-02',[home()],c)
+        c=coverage();c['community_ids'].append('3');c['community_counts']['3']=0
+        c['unavailable_communities']=['3']
+        self.assertEqual(advance(s,'2026-10-02',[home()],c)['last_success'],'2026-10-02')
     def test_duplicate_and_wrong_brand_rejected(self):
         for rows in ([home(),home()],[dict(home(),brand='CCS')],[home(),dict(home('0001_02_CMP'),address=home()['address'])]):
             with self.assertRaises(HealthError):self.start(rows)

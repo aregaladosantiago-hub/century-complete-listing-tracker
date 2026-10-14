@@ -23,4 +23,6 @@ The corresponding `brand=CCS` public map feed returned 39,293 lot features (36,7
 
 Historical, unreleased, model and homesite records remain supplemental evidence rather than available-inventory enumeration. The traditional brand is therefore collected as a separate series with independent state and reports. Its baseline does not imply historical additions or removals, and its public listings do not guarantee capture of offline, personalized or pre-listing sales.
 
+On 2026-10-13 the Century Complete directory added a `Labelle 2` entry marked `quickMoveInAvailable=false` while its linked page consistently returned HTTP 404. The entry was absent from the prior accepted directory and had no prior cards. The collector now records 404/410 evidence for such explicitly empty shells, while rejecting the capture if the page was previously populated or the directory advertises quick-move-in inventory.
+
 22a855c4667a07cc7702b9e4b06e1105c4d2bd74

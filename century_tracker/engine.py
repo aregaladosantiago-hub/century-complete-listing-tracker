@@ -56,6 +56,13 @@ def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
     if len(physical) != len(set(physical)):
         raise HealthError('Multiple SKUs for the same address; identity review required')
     if previous:
+        previous_counts = previous.get('community_counts', {})
+        unavailable = {
+            community for community in coverage.get('unavailable_communities', [])
+            if previous_counts.get(community, 0) != 0
+        }
+        if unavailable:
+            raise HealthError(f'Previously populated community page unavailable: {sorted(unavailable)}')
         for field in ('communities', 'map_lots', 'observed_active'):
             if coverage[field] < previous[field] * .8:
                 raise HealthError(f'Abnormal national coverage decline: {field}')
@@ -70,7 +77,6 @@ def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
         # Century retires an empty directory entry.  That cannot create false
         # listing removals, so only fail closed when a missing community had
         # inventory in the last accepted capture.
-        previous_counts = previous.get('community_counts', {})
         missing = {
             community for community in set(previous['community_ids']) - set(coverage['community_ids'])
             if previous_counts.get(community) != 0
