@@ -1,0 +1,9 @@
+{
+  "brand": "CCS",
+  "date": "2026-10-19",
+  "error": "HealthError: Community directory contracted; review required: ['1073745127']",
+  "run_id": "20261019T184805812253Z",
+  "source_version": 3,
+  "started_at": "2026-10-19T18:48:05.812253+00:00",
+  "status": "failed"
+}
