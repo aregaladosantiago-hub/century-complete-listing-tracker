@@ -62,6 +62,8 @@ class AccountingTests(unittest.TestCase):
         c=coverage();c['community_ids']=['2']
         with self.assertRaisesRegex(HealthError,'Community directory contracted'):
             advance(s,'2026-10-02',[home()],c)
+        c['retired_communities']={'1':[{'home_key':'0001_01_CMP','status':'Pending'}]}
+        self.assertEqual(advance(s,'2026-10-02',[home(status='Pending')],c)['last_success'],'2026-10-02')
     def test_unavailable_page_must_not_hide_previously_observed_cards(self):
         s=self.start();c=coverage();c['unavailable_communities']=['1']
         with self.assertRaisesRegex(HealthError,'Previously populated community page unavailable'):

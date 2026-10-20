@@ -77,9 +77,10 @@ def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
         # Century retires an empty directory entry.  That cannot create false
         # listing removals, so only fail closed when a missing community had
         # inventory in the last accepted capture.
+        resolved_retirements=set(coverage.get('retired_communities', {}))
         missing = {
             community for community in set(previous['community_ids']) - set(coverage['community_ids'])
-            if previous_counts.get(community) != 0
+            if previous_counts.get(community) != 0 and community not in resolved_retirements
         }
         if missing:
             raise HealthError(f'Community directory contracted; review required: {sorted(missing)}')

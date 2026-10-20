@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from pathlib import Path
 from century_tracker.source import (BASE, FetchError, detail_availability, directory, fetch,
-                                    map_rows, parse_community, safe_empty_community)
+                                    map_rows, parse_community, retired_community_rows, safe_empty_community)
 from century_tracker.engine import HealthError
 
 FIX=Path(__file__).parent/'fixtures'
@@ -109,6 +109,20 @@ class SourceTests(unittest.TestCase):
     def test_detail_pending_does_not_use_stale_structured_stock(self):
         detail=self.detail(flag='Pending',buy=False)+'<script>{"availability":"InStock"}</script>'
         self.assertEqual(detail_availability(detail,'00011062_10503_CMP',16899000),'Pending')
+
+    def test_populated_retired_community_requires_exact_contracted_details(self):
+        prior=dict(home_key='00011062_10503_CMP',listing_id='00011062_10503_CMP',brand='CMP',
+                   community_id='00011062',directory_id='1',address='4186 Quincy Ave',lot='10503',
+                   community='Test Community',url=BASE+'/lots/10503-quincy-ave/',status='Available',
+                   active=True,price_cents=16899000,last_price_cents=16899000,state='AZ',market='AZ/Phoenix')
+        previous=dict(community_ids=['1'],community_counts={'1':1})
+        rows,evidence=retired_community_rows({'2'},previous,{prior['home_key']:prior},
+                                             lambda home:self.detail(flag='Pending',buy=False))
+        self.assertEqual(rows[0]['status'],'Pending')
+        self.assertEqual(rows[0]['source'],'retired_community_detail_confirmed')
+        self.assertEqual(evidence['1'][0]['home_key'],prior['home_key'])
+        with self.assertRaisesRegex(HealthError,'still available'):
+            retired_community_rows({'2'},previous,{prior['home_key']:prior},lambda home:self.detail())
 
     def test_available_card_does_not_need_detail_fetch(self):
         def unexpected(*args): raise AssertionError('Unexpected detail request')

@@ -146,6 +146,42 @@ def detail_availability(text, sku, expected_price):
     return 'Available'
 
 
+def retired_community_rows(current_community_ids, previous_coverage, previous_homes, detail_loader):
+    """Resolve populated communities that left the directory using exact home pages.
+
+    A directory retirement is harmless when its prior cards were already inactive.
+    Every previously active home, however, must now have an identity-bound detail
+    page that explicitly reports a contracted status.  This turns a disappearance
+    into positive removal evidence instead of treating absence as a sale.
+    """
+    if not previous_coverage:
+        return [], {}
+    previous_counts=previous_coverage.get('community_counts', {})
+    missing={
+        str(community) for community in previous_coverage.get('community_ids', [])
+        if str(community) not in current_community_ids and previous_counts.get(str(community), 0) != 0
+    }
+    rows=[];evidence={}
+    for community in sorted(missing):
+        active=[home for home in previous_homes.values()
+                if home.get('active') and str(home.get('directory_id'))==community]
+        confirmations=[]
+        for home in sorted(active,key=lambda item:item['home_key']):
+            sku=home['home_key']
+            status=detail_availability(detail_loader(home),sku,
+                                       home.get('price_cents') or home.get('last_price_cents'))
+            if status not in CONTRACTED:
+                raise HealthError(f'Retired community home is still available: {sku}')
+            rows.append(dict(home_key=sku,listing_id=home.get('listing_id',sku),brand=home['brand'],
+                             community_id=home['community_id'],address=home['address'],lot=home['lot'],
+                             community=home['community'],url=home['url'],status=status,active=False,
+                             price_cents=None,state=home['state'],market=home['market'],
+                             source='retired_community_detail_confirmed',directory_id=community))
+            confirmations.append(dict(home_key=sku,status=status,url=home['url']))
+        evidence[community]=confirmations
+    return rows,evidence
+
+
 def parse_community(c, text, lots, detail_loader=None, brand='CMP'):
     config=brand_config(brand)
     items={}
@@ -215,7 +251,7 @@ def parse_community(c, text, lots, detail_loader=None, brand='CMP'):
     return rows
 
 
-def collect(raw_dir, fixture=None, brand='CMP'):
+def collect(raw_dir, fixture=None, brand='CMP', previous_coverage=None, previous_homes=None):
     """Save compressed source evidence before validating the candidate snapshot."""
     config=brand_config(brand)
     directory_url=BASE + f"/api/search/findcommunities?brand={config['directory']}&mapShown=true&seed=42"
@@ -293,6 +329,14 @@ def collect(raw_dir, fixture=None, brand='CMP'):
         final=directory(json.loads(obtain('directory-end.json',directory_url)),brand)
         if {c['communityId'] for c in final}!={c['communityId'] for c in cs}:
             raise HealthError('Directory changed during capture')
+    community_ids={str(c['communityId']) for c in cs}
+    retired_rows,retired_communities=retired_community_rows(
+        community_ids,previous_coverage,previous_homes or {},
+        lambda home: obtain('retired-detail-'+home['home_key']+'.html',home['url']).decode())
+    if retired_rows:
+        by_key={row['home_key']:row for row in rows}
+        by_key.update((row['home_key'],row) for row in retired_rows)
+        rows=list(by_key.values())
     # Preserve source fields used by the collector without daily image/marketing payloads.
     for archive in raw_dir.glob('community-*.html.gz'):
         text=gzip.decompress(archive.read_bytes()).decode()
@@ -310,9 +354,10 @@ def collect(raw_dir, fixture=None, brand='CMP'):
     active=[r for r in rows if r['active']]
     if len(active)<config['min_active']:
         raise HealthError('Implausibly small available inventory')
-    coverage=dict(complete=True,communities=len(cs),community_ids=sorted(str(c['communityId']) for c in cs),
+    coverage=dict(complete=True,communities=len(cs),community_ids=sorted(community_ids),
                   map_lots=len(lots),observed_active=len(active),cards=sum(map(len,groups)),
                   unavailable_communities=sorted(missing_ids),
+                  retired_communities=retired_communities,
                   markets=dict(collections.Counter(r['market'] for r in active)),
                   community_counts={str(c['communityId']):len(g) for c,g in zip(cs,groups)},
                   source_hashes={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(raw_dir.glob('*.gz'))})

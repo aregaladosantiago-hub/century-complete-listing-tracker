@@ -45,9 +45,10 @@ def main():
         print(f"{day} {series['name']}: already captured; daily observation is immutable")
         return 0
     raw=data_root/'raw'/run_id
-    manifest=dict(run_id=run_id,date=day,brand=args.brand,started_at=now.isoformat(),source_version=3)
+    manifest=dict(run_id=run_id,date=day,brand=args.brand,started_at=now.isoformat(),source_version=4)
     try:
-        rows,coverage=collect(raw,brand=args.brand)
+        rows,coverage=collect(raw,brand=args.brand,previous_coverage=state.get('coverage'),
+                              previous_homes=state.get('homes',{}))
         updated=advance(state,day,rows,coverage,args.brand)
     except Exception as exc:
         manifest.update(status='failed',error=f'{type(exc).__name__}: {exc}')
