@@ -956,6 +956,15 @@
       "removal_asp": "395067.81",
       "removed": 16,
       "scrape_status": "success"
+    },
+    {
+      "active": "",
+      "added": "",
+      "date": "2026-10-23",
+      "net_change": "",
+      "removal_asp": "",
+      "removed": "",
+      "scrape_status": "failed"
     }
   ],
   "events": [

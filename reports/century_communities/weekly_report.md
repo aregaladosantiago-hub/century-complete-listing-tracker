@@ -1,6 +1,6 @@
 # Century Communities Listing Flow Tracker
 
-Last successful observation: 2026-10-22. Report as of 2026-10-22.
+Last successful observation: 2026-10-22. Report as of 2026-10-23.
 
 | Week | Period | Active | Added | Removed | Net Change | Removal ASP |
 |---|---|---:|---:|---:|---:|---:|
