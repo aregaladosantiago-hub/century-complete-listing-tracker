@@ -1,0 +1,9 @@
+{
+  "brand": "CMP",
+  "date": "2026-10-25",
+  "error": "HealthError: Abnormal national coverage decline: map_lots",
+  "run_id": "20261025T163944687584Z",
+  "source_version": 4,
+  "started_at": "2026-10-25T16:39:44.687584+00:00",
+  "status": "failed"
+}

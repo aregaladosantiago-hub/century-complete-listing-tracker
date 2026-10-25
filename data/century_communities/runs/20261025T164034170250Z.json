@@ -1,0 +1,9 @@
+{
+  "brand": "CCS",
+  "date": "2026-10-25",
+  "error": "HealthError: Abnormal national coverage decline: map_lots",
+  "run_id": "20261025T164034170250Z",
+  "source_version": 4,
+  "started_at": "2026-10-25T16:40:34.170250+00:00",
+  "status": "failed"
+}
