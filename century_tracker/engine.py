@@ -55,6 +55,13 @@ def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
     physical = [(r['community_id'], re.sub(r'\W', '', r['address'].lower())) for r in rows if r['active']]
     if len(physical) != len(set(physical)):
         raise HealthError('Multiple SKUs for the same address; identity review required')
+    for candidate in (coverage, previous):
+        if candidate is None:
+            continue
+        counts = candidate.get('map_status_counts')
+        if counts is not None and (any(type(n) is not int or n < 0 for n in counts.values()) or
+                                   sum(counts.values()) != candidate['map_lots']):
+            raise HealthError('Invalid map status coverage counts')
     if previous:
         previous_counts = previous.get('community_counts', {})
         unavailable = {
@@ -63,9 +70,15 @@ def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
         }
         if unavailable:
             raise HealthError(f'Previously populated community page unavailable: {sorted(unavailable)}')
-        for field in ('communities', 'map_lots', 'observed_active'):
+        for field in ('communities', 'observed_active'):
             if coverage[field] < previous[field] * .8:
                 raise HealthError(f'Abnormal national coverage decline: {field}')
+        current_map, previous_map = coverage['map_lots'], previous['map_lots']
+        if 'map_status_counts' in coverage and 'map_status_counts' in previous:
+            current_map -= coverage['map_status_counts'].get('Closed', 0)
+            previous_map -= previous['map_status_counts'].get('Closed', 0)
+        if current_map < previous_map * .8:
+            raise HealthError('Abnormal national coverage decline: map_lots')
         for market, old in previous['markets'].items():
             new = coverage['markets'].get(market, 0)
             if old >= 10 and new < old * .7:

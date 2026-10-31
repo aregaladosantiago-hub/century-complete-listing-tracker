@@ -64,6 +64,26 @@ class AccountingTests(unittest.TestCase):
             advance(s,'2026-10-02',[home()],c)
         c['retired_communities']={'1':[{'home_key':'0001_01_CMP','status':'Pending'}]}
         self.assertEqual(advance(s,'2026-10-02',[home(status='Pending')],c)['last_success'],'2026-10-02')
+    def test_closed_map_history_cleanup_does_not_block_live_inventory(self):
+        before=coverage();before['map_status_counts']={'Closed':9500,'SpecModel':1500}
+        s=advance(empty_state(),'2026-10-01',[home()],before)
+        after=coverage();after.update(map_lots=2500,map_status_counts={'Closed':1000,'SpecModel':1500})
+        updated=advance(s,'2026-10-02',[home()],after)
+        self.assertEqual(updated['last_success'],'2026-10-02')
+        self.assertEqual(updated['events'],[])
+    def test_non_closed_map_loss_still_rejects_capture(self):
+        before=coverage();before['map_status_counts']={'Closed':9500,'SpecModel':1500}
+        s=advance(empty_state(),'2026-10-01',[home()],before);original=copy.deepcopy(s)
+        after=coverage();after['map_status_counts']={'Closed':10000,'SpecModel':1000}
+        with self.assertRaisesRegex(HealthError,'coverage decline: map_lots'):
+            advance(s,'2026-10-02',[home()],after)
+        self.assertEqual(s,original)
+    def test_map_counts_cannot_hide_a_partial_capture(self):
+        s=self.start()
+        for counts in ({'Closed':12000},{'Closed':-1,'SpecModel':11001}):
+            after=coverage();after['map_status_counts']=counts
+            with self.assertRaisesRegex(HealthError,'Invalid map status coverage'):
+                advance(s,'2026-10-02',[home()],after)
     def test_unavailable_page_must_not_hide_previously_observed_cards(self):
         s=self.start();c=coverage();c['unavailable_communities']=['1']
         with self.assertRaisesRegex(HealthError,'Previously populated community page unavailable'):

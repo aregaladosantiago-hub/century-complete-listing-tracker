@@ -75,6 +75,15 @@ class SourceTests(unittest.TestCase):
         with self.assertRaises(HealthError):map_rows({'Type':'error'})
         for p in [dict(Type='Lot',Brand='CCS'),dict(Type='Lot',Brand='CMP',LotStatus='Mystery')]:
             with self.assertRaises(HealthError):map_rows(dict(Type='FeatureCollection',Features=[dict(Properties=p)]))
+    def test_closed_history_cannot_satisfy_minimum_live_map_coverage(self):
+        def payload(live,closed):
+            features=[dict(Properties=dict(Type='Lot',Brand='CMP',LotStatus=status,
+                       LotSku=f'0001_{i}_CMP'))
+                      for i,status in enumerate(['SpecModel']*live+['Closed']*closed)]
+            return dict(Type='FeatureCollection',Features=features)
+        self.assertEqual(len(map_rows(payload(500,0))[0]),500)
+        with self.assertRaisesRegex(HealthError,'non-closed national map'):
+            map_rows(payload(499,6000))
     def test_conflicting_map_card_status_rejected(self):
         with self.assertRaises(HealthError):parse_community(C,(FIX/'available.html').read_text(),{'00011062_10503_CMP':{'LotStatus':'Pending'}})
     def test_exact_detail_page_resolves_stale_map_conflict(self):

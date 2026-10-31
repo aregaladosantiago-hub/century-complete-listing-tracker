@@ -1,12 +1,31 @@
 import json
+import gzip
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from century_tracker.run import main
+from century_tracker.run import main, restore_map_status_counts
+from century_tracker.engine import HealthError
 from test_engine import home, coverage
 
 class PublicationTests(unittest.TestCase):
+    def test_legacy_map_counts_require_original_hash_verified_evidence(self):
+        with tempfile.TemporaryDirectory() as root:
+            data=Path(root);archive=data/'raw'/'accepted'/'map.json.gz'
+            archive.parent.mkdir(parents=True);(data/'runs').mkdir()
+            raw=gzip.compress(json.dumps([{'LotSku':'1_CMP','LotStatus':'Closed'},
+                                          {'LotSku':'2_CMP','LotStatus':'SpecModel'}]).encode())
+            archive.write_bytes(raw)
+            (data/'runs'/'accepted.json').write_text(json.dumps(dict(status='success',date='2026-10-22',run_id='accepted')))
+            state=dict(last_success='2026-10-22',coverage=dict(map_lots=2,
+                       source_hashes={'map.json.gz':hashlib.sha256(raw).hexdigest()}))
+            upgraded=restore_map_status_counts(state,data)
+            self.assertEqual(upgraded['coverage']['map_status_counts'],{'Closed':1,'SpecModel':1})
+            self.assertNotIn('map_status_counts',state['coverage'])
+            archive.write_bytes(raw+b'changed')
+            with self.assertRaisesRegex(HealthError,'hash mismatch'):
+                restore_map_status_counts(state,data)
     def invoke(self, root, brand='CMP'):
         with patch('sys.argv',['tracker','--root',root,'--brand',brand]):
             return main()

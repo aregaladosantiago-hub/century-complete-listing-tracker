@@ -1,12 +1,16 @@
 """Collect, validate, and publish a daily observation."""
 import argparse
+import collections
+import copy
+import gzip
+import hashlib
 import json
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from .engine import advance, empty_state, failure, reports, csv_text, dollars
+from .engine import advance, empty_state, failure, reports, csv_text, dollars, HealthError
 from .source import collect
 
 
@@ -22,6 +26,31 @@ def save_json(path, value):
     temp=path.with_suffix(path.suffix+'.tmp')
     temp.write_text(json.dumps(value,indent=2,sort_keys=True)+'\n')
     os.replace(temp,path)
+
+
+def restore_map_status_counts(state, data_root):
+    """Upgrade coverage from hash-verified evidence of its accepted capture."""
+    coverage=state.get('coverage')
+    if not coverage or 'map_status_counts' in coverage:
+        return state
+    digest=coverage.get('source_hashes',{}).get('map.json.gz')
+    if not digest:
+        return state  # Legacy imports keep the conservative total-count check.
+    for receipt in sorted((data_root/'runs').glob('*.json'),reverse=True):
+        run=json.loads(receipt.read_text())
+        if run.get('status')!='success' or run.get('date')!=state['last_success']:
+            continue
+        archive=data_root/'raw'/run['run_id']/'map.json.gz'
+        raw=archive.read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=digest:
+            raise HealthError('Accepted map evidence hash mismatch')
+        lots=json.loads(gzip.decompress(raw))
+        if len(lots)!=coverage['map_lots'] or len({p['LotSku'] for p in lots})!=len(lots):
+            raise HealthError('Accepted map evidence count mismatch')
+        upgraded=copy.deepcopy(state)
+        upgraded['coverage']['map_status_counts']=dict(collections.Counter(p['LotStatus'] for p in lots))
+        return upgraded
+    raise HealthError('Accepted map evidence receipt missing')
 
 
 def main():
@@ -45,8 +74,9 @@ def main():
         print(f"{day} {series['name']}: already captured; daily observation is immutable")
         return 0
     raw=data_root/'raw'/run_id
-    manifest=dict(run_id=run_id,date=day,brand=args.brand,started_at=now.isoformat(),source_version=4)
+    manifest=dict(run_id=run_id,date=day,brand=args.brand,started_at=now.isoformat(),source_version=5)
     try:
+        state=restore_map_status_counts(state,data_root)
         rows,coverage=collect(raw,brand=args.brand,previous_coverage=state.get('coverage'),
                               previous_homes=state.get('homes',{}))
         updated=advance(state,day,rows,coverage,args.brand)

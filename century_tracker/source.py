@@ -16,9 +16,9 @@ from .engine import HealthError, price
 BASE = 'https://www.centurycommunities.com'
 BRANDS = {
     'CMP': dict(name='Century Complete', directory='Century%20Complete',
-                min_communities=100, min_map_lots=5000, min_active=300),
+                min_communities=100, min_map_lots=500, min_active=300),
     'CCS': dict(name='Century Communities', directory='Century%20Communities',
-                min_communities=150, min_map_lots=20000, min_active=300),
+                min_communities=150, min_map_lots=5000, min_active=300),
 }
 CONTRACTED = {'Pending','Reserved','Under Contract','Already Taken','Sold','Closed'}
 KNOWN = CONTRACTED | {'SpecModel','Unreleased','Model','Unavailable','Available HomeSite','Available','Under Construction','Move-In Ready','Hidden'}
@@ -117,8 +117,10 @@ def map_rows(payload, brand='CMP'):
         if sku in lots and any(lots[sku][k]!=p[k] for k in ('LotStatus','Price','IsPublished','AddressLine1','ViewDetailsUrl')):
             raise HealthError('Conflicting duplicate map features')
         lots[sku]=p
-    if len(lots)<config['min_map_lots']:
-        raise HealthError('Implausibly small national map response')
+    # Closed lots are historical records that the source periodically purges.
+    # Only non-closed lots can establish current map coverage.
+    if sum(p['LotStatus']!='Closed' for p in lots.values())<config['min_map_lots']:
+        raise HealthError('Implausibly small non-closed national map response')
     return lots,communities
 
 
@@ -355,7 +357,8 @@ def collect(raw_dir, fixture=None, brand='CMP', previous_coverage=None, previous
     if len(active)<config['min_active']:
         raise HealthError('Implausibly small available inventory')
     coverage=dict(complete=True,communities=len(cs),community_ids=sorted(community_ids),
-                  map_lots=len(lots),observed_active=len(active),cards=sum(map(len,groups)),
+                  map_lots=len(lots),map_status_counts=dict(collections.Counter(p['LotStatus'] for p in lots.values())),
+                  observed_active=len(active),cards=sum(map(len,groups)),
                   unavailable_communities=sorted(missing_ids),
                   retired_communities=retired_communities,
                   markets=dict(collections.Counter(r['market'] for r in active)),
