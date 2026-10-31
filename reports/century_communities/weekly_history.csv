@@ -1,4 +1,4 @@
 ﻿week,period_start,period_end,active,added,removed,net_change,removal_asp,status
 Week 1,2026-10-12,2026-10-18,1765,93,99,-6,455679.98,closed_incomplete
 Week 2,2026-10-19,2026-10-25,1762,67,70,-3,421161.19,closed_incomplete
-Week 3,2026-10-26,2026-11-01,,,,,,current
+Week 3,2026-10-26,2026-11-01,1745,114,131,-17,430222.36,current

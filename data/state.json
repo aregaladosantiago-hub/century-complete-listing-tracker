@@ -326,6 +326,16 @@
     ],
     "complete": true,
     "map_lots": 12350,
+    "map_status_counts": {
+      "Available HomeSite": 2,
+      "Closed": 10640,
+      "Model": 9,
+      "Pending": 58,
+      "Sold": 190,
+      "SpecModel": 551,
+      "Unavailable": 1,
+      "Unreleased": 899
+    },
     "markets": {
       "AL/Birmingham Metro": 15,
       "AL/Huntsville Metro": 23,
