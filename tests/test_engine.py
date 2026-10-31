@@ -84,6 +84,27 @@ class AccountingTests(unittest.TestCase):
             after=coverage();after['map_status_counts']=counts
             with self.assertRaisesRegex(HealthError,'Invalid map status coverage'):
                 advance(s,'2026-10-02',[home()],after)
+    def test_market_decline_requires_every_prior_home_to_be_accounted_for(self):
+        rows=[home(f'0001_{i:02}_CMP',market='KY/Lexington Metro') for i in range(13)]
+        before=coverage();before['markets']={'KY/Lexington Metro':13}
+        s=advance(empty_state(),'2026-10-22',rows,before)
+        after=coverage();after['markets']={'KY/Lexington Metro':9}
+        current=[dict(r,status='Sold',active=False) if i<4 else r for i,r in enumerate(rows)]
+        updated=advance(s,'2026-10-30',current,after)
+        self.assertEqual(updated['daily'][-1]['removed'],4)
+        for incomplete in [current[1:],[dict(current[0],status='Unavailable')]+current[1:]]:
+            with self.assertRaisesRegex(HealthError,'market coverage decline'):
+                advance(s,'2026-10-30',incomplete,after)
+    def test_community_decline_requires_identity_bound_status_evidence(self):
+        rows=[home(f'0001_{i:02}_CMP',directory_id='1',source='community_card') for i in range(10)]
+        before=coverage();before['community_counts']['1']=10
+        s=advance(empty_state(),'2026-10-22',rows,before)
+        after=coverage();after['community_counts']['1']=4
+        current=[dict(r,status='Sold',active=False,directory_id='',source='map') if i<6 else r
+                 for i,r in enumerate(rows)]
+        self.assertEqual(advance(s,'2026-10-30',current,after)['daily'][-1]['removed'],6)
+        with self.assertRaisesRegex(HealthError,'community coverage decline'):
+            advance(s,'2026-10-30',current[1:],after)
     def test_unavailable_page_must_not_hide_previously_observed_cards(self):
         s=self.start();c=coverage();c['unavailable_communities']=['1']
         with self.assertRaisesRegex(HealthError,'Previously populated community page unavailable'):

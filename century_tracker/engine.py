@@ -13,6 +13,9 @@ class HealthError(ValueError):
     pass
 
 
+CONTRACTED = {'Pending','Reserved','Under Contract','Already Taken','Sold','Closed'}
+
+
 def price(value):
     if value is None or value == '':
         return None
@@ -44,7 +47,7 @@ def empty_state():
     return dict(version=1, last_success=None, first_date=None, homes={}, events=[], daily=[], weeks=[], coverage=None)
 
 
-def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
+def validate_coverage(rows, coverage, previous, expected_brand='CMP', previous_homes=None, previous_day=None):
     if not coverage.get('complete'):
         raise HealthError('Incomplete source capture')
     ids = [r['home_key'] for r in rows]
@@ -79,13 +82,32 @@ def validate_coverage(rows, coverage, previous, expected_brand='CMP'):
             previous_map -= previous['map_status_counts'].get('Closed', 0)
         if current_map < previous_map * .8:
             raise HealthError('Abnormal national coverage decline: map_lots')
+        current={r['home_key']:r for r in rows}
+        def accounted_for(prior, field, value):
+            return all(h['home_key'] in current and (
+                (current[h['home_key']]['active'] and current[h['home_key']].get(field)==value) or
+                (not current[h['home_key']]['active'] and current[h['home_key']]['status'] in CONTRACTED))
+                for h in prior)
         for market, old in previous['markets'].items():
             new = coverage['markets'].get(market, 0)
             if old >= 10 and new < old * .7:
-                raise HealthError(f'Abnormal market coverage decline: {market}')
+                # A long capture gap can include a real concentration of sales.
+                # Accept it only if every previously observed available SKU is
+                # still observed in that market or explicitly contracted now.
+                prior=[h for h in (previous_homes or {}).values()
+                       if h.get('active') and h.get('market')==market and h.get('last_seen')==previous_day]
+                accounted=len(prior)==old and accounted_for(prior,'market',market)
+                if not accounted:
+                    raise HealthError(f'Abnormal market coverage decline: {market}')
         for community, old in previous.get('community_counts', {}).items():
             if old >= 5 and coverage.get('community_counts', {}).get(community, 0) < old * .5:
-                raise HealthError(f'Abnormal community coverage decline: {community}')
+                prior_cards=[h for h in (previous_homes or {}).values()
+                             if h.get('last_seen')==previous_day and h.get('directory_id')==community and
+                             h.get('source','').startswith('community_card')]
+                accounted=(len(prior_cards)==old and accounted_for(
+                    [h for h in prior_cards if h['active']],'directory_id',community))
+                if not accounted:
+                    raise HealthError(f'Abnormal community coverage decline: {community}')
         # A community with no observed homes can legitimately disappear when
         # Century retires an empty directory entry.  That cannot create false
         # listing removals, so only fail closed when a missing community had
@@ -104,7 +126,7 @@ def advance(state, day, rows, coverage, expected_brand='CMP'):
     date.fromisoformat(day)
     if state['last_success'] and day <= state['last_success']:
         raise HealthError('Successful dates are immutable; no same-day replacement or backfill')
-    validate_coverage(rows, coverage, state['coverage'], expected_brand)
+    validate_coverage(rows, coverage, state['coverage'], expected_brand, state['homes'], state['last_success'])
     s = copy.deepcopy(state)
     baseline = s['last_success'] is None
     s['first_date'] = s['first_date'] or day

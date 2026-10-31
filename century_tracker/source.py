@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, parse_qs
 from bs4 import BeautifulSoup, SoupStrainer
-from .engine import HealthError, price
+from .engine import HealthError, price, CONTRACTED
 
 BASE = 'https://www.centurycommunities.com'
 BRANDS = {
@@ -20,7 +20,6 @@ BRANDS = {
     'CCS': dict(name='Century Communities', directory='Century%20Communities',
                 min_communities=150, min_map_lots=5000, min_active=300),
 }
-CONTRACTED = {'Pending','Reserved','Under Contract','Already Taken','Sold','Closed'}
 KNOWN = CONTRACTED | {'SpecModel','Unreleased','Model','Unavailable','Available HomeSite','Available','Under Construction','Move-In Ready','Hidden'}
 PURCHASE_ACTIONS = {'Buy Now':'/buy-online/','Submit An Offer':'/bid-online/'}
 
