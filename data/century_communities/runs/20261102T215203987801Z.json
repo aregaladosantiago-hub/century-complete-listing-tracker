@@ -1,0 +1,9 @@
+{
+  "brand": "CCS",
+  "date": "2026-11-02",
+  "error": "HealthError: Unrecognized detail availability: 00012035_77CCC6B_CCS",
+  "run_id": "20261102T215203987801Z",
+  "source_version": 5,
+  "started_at": "2026-11-02T21:52:03.987801+00:00",
+  "status": "failed"
+}
