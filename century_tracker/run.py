@@ -74,7 +74,7 @@ def main():
         print(f"{day} {series['name']}: already captured; daily observation is immutable")
         return 0
     raw=data_root/'raw'/run_id
-    manifest=dict(run_id=run_id,date=day,brand=args.brand,started_at=now.isoformat(),source_version=5)
+    manifest=dict(run_id=run_id,date=day,brand=args.brand,started_at=now.isoformat(),source_version=6)
     try:
         state=restore_map_status_counts(state,data_root)
         rows,coverage=collect(raw,brand=args.brand,previous_coverage=state.get('coverage'),

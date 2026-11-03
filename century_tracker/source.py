@@ -22,6 +22,14 @@ BRANDS = {
 }
 KNOWN = CONTRACTED | {'SpecModel','Unreleased','Model','Unavailable','Available HomeSite','Available','Under Construction','Move-In Ready','Hidden'}
 PURCHASE_ACTIONS = {'Buy Now':'/buy-online/','Submit An Offer':'/bid-online/'}
+AVAILABLE_FLAGS = {'available','now selling','under construction','move-in ready'}
+
+
+def unknown_availability_flags(nodes):
+    return [node.get_text(' ',strip=True) for node in nodes
+            if node.get_text(' ',strip=True) and
+            not any(cls.startswith('custom-flag') for cls in node.get('class',[])) and
+            node.get_text(' ',strip=True).casefold() not in AVAILABLE_FLAGS]
 
 
 class FetchError(HealthError):
@@ -113,7 +121,9 @@ def map_rows(payload, brand='CMP'):
         sku=p['LotSku']
         if not sku or not sku.endswith('_'+brand):
             raise HealthError('Missing or invalid map home SKU')
-        if sku in lots and any(lots[sku][k]!=p[k] for k in ('LotStatus','Price','IsPublished','AddressLine1','ViewDetailsUrl')):
+        if sku in lots and any(lots[sku].get(k)!=p.get(k) for k in
+                               ('LotStatus','Price','IsPublished','AddressLine1','ViewDetailsUrl',
+                                'IsModelHome','CanBuyOnline','Flag')):
             raise HealthError('Conflicting duplicate map features')
         lots[sku]=p
     # Closed lots are historical records that the source periodically purges.
@@ -123,14 +133,15 @@ def map_rows(payload, brand='CMP'):
     return lots,communities
 
 
-def detail_availability(text, sku, expected_price):
+def detail_availability(text, sku, expected_price, mapped=None, previous=None):
     """Resolve a missing card purchase button using the same home's detail page."""
     soup=BeautifulSoup(text,'html.parser')
     products=soup.select('.product_detail_contain[data-template="ProductDetailCommercePage_Lot"]')
     if len(products)!=1 or products[0].get('data-product-id')!=sku:
         raise HealthError(f'Detail identity mismatch: {sku}')
     product=products[0]
-    flags=[x.get_text(' ',strip=True).casefold() for x in product.select('.gallery_flags_icon,.lot-status-icon')]
+    flag_nodes=product.select('.gallery_flags_icon,.lot-status-icon')
+    flags=[x.get_text(' ',strip=True).casefold() for x in flag_nodes]
     status=next((v for v in sorted(CONTRACTED) if v.casefold() in flags),None)
     buy=False
     for a in soup.select('.product_detail_contain a[href],nav.sticky_footer_contain a[href]'):
@@ -139,11 +150,29 @@ def detail_availability(text, sku, expected_price):
         if buy:
             raise HealthError(f'Conflicting detail availability: {sku}')
         return status
-    if not buy:
+    # Some advertised homes disable online checkout. A missing
+    # online checkout is not a contracted status, but a price alone cannot prove
+    # availability either. Require the exact published, non-model map lot to
+    # affirm Now Selling and explicitly disable online buying.
+    advertised_without_checkout=bool(mapped and
+        mapped.get('LotSku')==sku and mapped.get('LotStatus')=='SpecModel' and
+        mapped.get('IsPublished') is True and mapped.get('IsModelHome') is False and
+        mapped.get('CanBuyOnline') is False and mapped.get('Flag')=='Now Selling')
+    # The map is supplemental and omits some advertised homes. Preserve an
+    # already accepted active home's availability only when the same SKU and
+    # unchanged advertised price remain on both its card and exact detail page.
+    # This cannot introduce a new or previously inactive home without evidence.
+    continuing_advertisement=bool(mapped is None and previous and
+        previous.get('home_key')==sku and previous.get('active') is True and
+        previous.get('status')=='Available' and previous.get('price_cents')==expected_price)
+    if not buy and (unknown_availability_flags(flag_nodes) or
+                    not (advertised_without_checkout or continuing_advertisement)):
         raise HealthError(f'Unrecognized detail availability: {sku}')
     displayed=product.select_one('.price')
     if displayed is None or expected_price is None or price(displayed.get_text(strip=True))!=expected_price:
         raise HealthError(f'Detail advertised price disagreement: {sku}')
+    if not buy and mapped is not None and not advertised_price_agrees(displayed.get_text(strip=True),mapped.get('Price')):
+        raise HealthError(f'Map advertised price disagreement: {sku}')
     return 'Available'
 
 
@@ -183,7 +212,7 @@ def retired_community_rows(current_community_ids, previous_coverage, previous_ho
     return rows,evidence
 
 
-def parse_community(c, text, lots, detail_loader=None, brand='CMP'):
+def parse_community(c, text, lots, detail_loader=None, brand='CMP', previous_homes=None):
     config=brand_config(brand)
     items={}
     for raw in re.findall(r'data-ga-onload-event="([^"]+)"',text):
@@ -233,12 +262,16 @@ def parse_community(c, text, lots, detail_loader=None, brand='CMP'):
         if map_conflict:
             if detail_loader is None:
                 raise HealthError(f'Conflicting card/map availability: {sku}')
-            status=detail_availability(detail_loader(sku,url),sku,card_price)
+            status=detail_availability(detail_loader(sku,url),sku,card_price,mapped,
+                                       (previous_homes or {}).get(sku))
             confirmed=True
         elif not status and not buy:
+            if unknown_availability_flags(card.select('.quick-icon')):
+                raise HealthError(f'Unrecognized card availability: {sku}')
             if detail_loader is None:
                 raise HealthError(f'Unrecognized home availability: {sku}')
-            status=detail_availability(detail_loader(sku,url),sku,card_price)
+            status=detail_availability(detail_loader(sku,url),sku,card_price,mapped,
+                                       (previous_homes or {}).get(sku))
             confirmed=True
         status=status or 'Available'
         if status=='Available' and (not advertised_price_agrees(shown,item['price']) or
@@ -314,7 +347,7 @@ def collect(raw_dir, fixture=None, brand='CMP', previous_coverage=None, previous
         if data is None:
             return []
         return parse_community(c,data.decode(),lots,
-                               lambda sku,url: obtain('detail-'+sku+'.html',url).decode(),brand)
+                               lambda sku,url: obtain('detail-'+sku+'.html',url).decode(),brand,previous_homes)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         groups=list(pool.map(one,cs))
     rows=[r for group in groups for r in group]
@@ -350,7 +383,7 @@ def collect(raw_dir, fixture=None, brand='CMP', previous_coverage=None, previous
                                 if json.loads(html.unescape(raw)).get('ecommerce',{}).get('item_list_id')=='quick-move-in'])
         archive.with_name(archive.name.replace('.html.gz','.json.gz')).write_bytes(gzip.compress(json.dumps(evidence).encode(),mtime=0))
         archive.unlink()
-    map_fields=('LotSku','LotId','CommunityId','Brand','LotStatus','IsPublished','IsModelHome','IsQuickMoveIn','Price','AddressLine1','City','State','PostalCode','ViewDetailsUrl','ModifiedDate')
+    map_fields=('LotSku','LotId','CommunityId','Brand','LotStatus','IsPublished','IsModelHome','IsQuickMoveIn','CanBuyOnline','Flag','Price','AddressLine1','City','State','PostalCode','ViewDetailsUrl','ModifiedDate')
     (raw_dir/'map.json.gz').write_bytes(gzip.compress(json.dumps([dict((k,p[k]) for k in map_fields) for p in lots.values()]).encode(),mtime=0))
     active=[r for r in rows if r['active']]
     if len(active)<config['min_active']:

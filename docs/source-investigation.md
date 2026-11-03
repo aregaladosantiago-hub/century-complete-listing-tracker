@@ -25,4 +25,33 @@ Historical, unreleased, model and homesite records remain supplemental evidence 
 
 On 2026-10-13 the Century Complete directory added a `Labelle 2` entry marked `quickMoveInAvailable=false` while its linked page consistently returned HTTP 404. The entry was absent from the prior accepted directory and had no prior cards. The collector now records 404/410 evidence for such explicitly empty shells, while rejecting the capture if the page was previously populated or the directory advertises quick-move-in inventory.
 
-22a855c4667a07cc7702b9e4b06e1105c4d2bd74
+## Advertised homes without online checkout
+
+On 2026-11-02 the traditional brand capture stopped at Crosswinds home
+`00012035_77CCC6B_CCS` (187 Paddle Wheel Path). Its community card and exact
+SKU-bound detail page both advertised $475,990, but neither offered Buy Now or
+Submit An Offer. The map identified the same lot as `SpecModel`, published,
+not a model home, `Flag=Now Selling`, and `CanBuyOnline=false`, with a matching
+price. A fresh detail fetch reproduced the saved failure. Its structured
+`SoldOut` value conflicted with that advertisement and map evidence, reinforcing
+that JSON-LD stock alone cannot determine availability. A subsequent full live
+capture found the same checkout change on other Crosswinds homes, including
+`00012035_54CCC6B_CCS` (131 Hull Speed Drive), which the supplemental map omits.
+These homes were active in the accepted November 1 observation and still had
+the same advertised prices on their current community cards and exact detail
+pages.
+
+The collector now accepts this narrowly corroborated advertised-inventory case.
+It still requires the exact detail SKU and matching visible detail/card price,
+plus every map signal above and a matching map price. When the map omits the
+home entirely, an already accepted active `Available` home can instead retain
+that status only with the same SKU and unchanged advertised price, confirmed
+on the current card and exact detail page. This continuity rule cannot add or
+reactivate an unconfirmed home and cannot override a present but inconclusive
+map record. Missing fields, model or unpublished lots, unknown availability
+flags and conflicting evidence still reject the capture. Marketing flags are
+identified by their source `custom-flag` classes. Visible contracted detail
+flags retain priority. Map evidence now also
+preserves `CanBuyOnline` and `Flag`, and contradictory duplicate map features for
+these fields reject the capture. Retired-community confirmation still requires
+an explicit contracted detail status. Capture receipts use source version 6.

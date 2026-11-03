@@ -119,6 +119,85 @@ class SourceTests(unittest.TestCase):
         detail=self.detail(flag='Pending',buy=False)+'<script>{"availability":"InStock"}</script>'
         self.assertEqual(detail_availability(detail,'00011062_10503_CMP',16899000),'Pending')
 
+    def test_advertised_office_sale_without_online_checkout(self):
+        # Regression: Crosswinds 187 Paddle Wheel Path blocked the CCS capture
+        # on 2026-11-02 despite matching advertised prices and Now Selling map.
+        mapped=json.loads((FIX/'office-sale-map.json').read_text())
+        detail=(FIX/'office-sale-detail.html').read_text()
+        row=parse_community(C,(FIX/'office-sale-card.html').read_text(),
+                            {mapped['LotSku']:mapped},lambda sku,url:detail,brand='CCS')[0]
+        self.assertTrue(row['active'])
+        self.assertEqual(row['price_cents'],47599000)
+        self.assertEqual(row['source'],'community_card_detail_confirmed')
+
+    def test_office_sale_requires_matching_affirmative_map_evidence(self):
+        mapped=json.loads((FIX/'office-sale-map.json').read_text())
+        detail=(FIX/'office-sale-detail.html').read_text()
+        invalid=[None,{},dict(mapped,LotSku='other_CCS'),dict(mapped,LotStatus='Pending'),
+                 dict(mapped,IsPublished=False),dict(mapped,IsModelHome=True),
+                 dict(mapped,CanBuyOnline=True),dict(mapped,Flag='Coming Soon'),
+                 dict(mapped,Price=470000),dict(mapped,Price=None)]
+        for candidate in invalid:
+            with self.subTest(mapped=candidate),self.assertRaises(HealthError):
+                detail_availability(detail,mapped['LotSku'],47599000,candidate)
+        for field in ('LotSku','LotStatus','IsPublished','IsModelHome','CanBuyOnline','Flag','Price'):
+            missing={k:v for k,v in mapped.items() if k!=field}
+            with self.subTest(missing=field),self.assertRaises(HealthError):
+                detail_availability(detail,mapped['LotSku'],47599000,missing)
+
+    def test_office_sale_keeps_detail_identity_price_and_status_checks(self):
+        mapped=json.loads((FIX/'office-sale-map.json').read_text())
+        detail=(FIX/'office-sale-detail.html').read_text()
+        sku=mapped['LotSku']
+        for candidate in (detail.replace(sku,'other_CCS'),detail.replace('$475,990','$470,000')):
+            with self.subTest(detail=candidate),self.assertRaises(HealthError):
+                detail_availability(candidate,sku,47599000,mapped)
+        pending=detail.replace('Gourmet Kitchen','Pending')
+        self.assertEqual(detail_availability(pending,sku,47599000,mapped),'Pending')
+
+    def test_conflicting_duplicate_map_sale_evidence_is_rejected(self):
+        mapped=json.loads((FIX/'office-sale-map.json').read_text())
+        mapped.update(Type='Lot',Brand='CCS')
+        for field,value in (('CanBuyOnline',True),('IsModelHome',True),('Flag','Coming Soon')):
+            payload=dict(Type='FeatureCollection',Features=[
+                dict(Properties=mapped),dict(Properties=dict(mapped,**{field:value}))])
+            with self.subTest(field=field),self.assertRaisesRegex(HealthError,'Conflicting duplicate'):
+                map_rows(payload,brand='CCS')
+
+    def test_existing_advertisement_can_continue_when_map_omits_home(self):
+        detail=(FIX/'continuing-advertisement-detail.html').read_text()
+        sku='00012035_54CCC6B_CCS'
+        prior=dict(home_key=sku,active=True,status='Available',price_cents=52499000)
+        self.assertEqual(detail_availability(detail,sku,52499000,previous=prior),'Available')
+        invalid=[None,{},dict(prior,home_key='other_CCS'),dict(prior,active=False),
+                 dict(prior,status='Pending'),dict(prior,price_cents=52000000)]
+        for candidate in invalid:
+            with self.subTest(previous=candidate),self.assertRaises(HealthError):
+                detail_availability(detail,sku,52499000,previous=candidate)
+        for mapped in ({},dict(LotSku=sku,LotStatus='Model')):
+            with self.subTest(mapped=mapped),self.assertRaises(HealthError):
+                detail_availability(detail,sku,52499000,mapped,prior)
+        unknown=detail.replace('</div>','<span class="lot-status-icon">Waitlist</span></div>')
+        with self.assertRaises(HealthError):
+            detail_availability(unknown,sku,52499000,previous=prior)
+        pending=detail.replace('</div>','<span class="lot-status-icon">Pending</span></div>')
+        self.assertEqual(detail_availability(pending,sku,52499000,previous=prior),'Pending')
+
+    def test_card_passes_previous_home_to_detail_confirmation(self):
+        sku='00011062_10503_CMP'
+        text=(FIX/'available.html').read_text().replace('Buy Now','View Details')
+        prior=dict(home_key=sku,active=True,status='Available',price_cents=16899000)
+        row=parse_community(C,text,{},lambda sku,url:self.detail(buy=False),
+                            previous_homes={sku:prior})[0]
+        self.assertTrue(row['active'])
+        unknown=text.replace('</li>','<span class="quick-icon">Waitlist</span></li>')
+        with self.assertRaises(HealthError):
+            parse_community(C,unknown,{},lambda sku,url:self.detail(buy=False),
+                            previous_homes={sku:prior})
+        with self.assertRaises(HealthError):
+            parse_community(C,text,{},lambda sku,url:self.detail(buy=False),
+                            previous_homes={sku:dict(prior,active=False)})
+
     def test_populated_retired_community_requires_exact_contracted_details(self):
         prior=dict(home_key='00011062_10503_CMP',listing_id='00011062_10503_CMP',brand='CMP',
                    community_id='00011062',directory_id='1',address='4186 Quincy Ave',lot='10503',
