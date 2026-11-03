@@ -1,5 +1,8 @@
 name: Daily listing flow
 on:
+  push:
+    branches: [main]
+    paths: ['century_tracker/**', '.github/workflows/daily.yml']
   schedule:
     - cron: '30 12 * * *'
   workflow_dispatch:

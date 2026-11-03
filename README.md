@@ -40,6 +40,6 @@ python -m century_tracker.run --brand CMP
 python -m century_tracker.run --brand CCS
 ```
 
-The **Daily listing flow** GitHub Actions workflow runs both independent brand series at **12:30 UTC daily** (07:30 Central daylight time / 06:30 Central standard time) and supports **Run workflow** manual dispatch. Dates use America/Chicago. Runs are serialized; the first accepted observation for each brand each day is immutable. Updated data and reports are committed only when changed. Rejected runs commit failure evidence and report failure in Actions, preserving the previous accepted inventory.
+The **Daily listing flow** GitHub Actions workflow runs both independent brand series at **12:30 UTC daily** (07:30 Central daylight time / 06:30 Central standard time), after collector-code or daily-workflow changes on `main`, and through **Run workflow** manual dispatch. This automatically verifies repairs and retries any rejected daily capture. Dates use America/Chicago. Runs are serialized; the first accepted observation for each brand each day is immutable. Updated data and reports are committed only when changed. Rejected runs commit failure evidence and report failure in Actions, preserving the previous accepted inventory. Data/report-only commits do not trigger another collection.
 
 See [implementation handoff](docs/handoff.md), [source investigation](docs/source-investigation.md), [methodology](docs/methodology.md), and [live validation](docs/live-validation.md) for scope and limitations.
