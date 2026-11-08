@@ -1,0 +1,9 @@
+{
+  "brand": "CCS",
+  "date": "2026-11-08",
+  "error": "HealthError: Abnormal community coverage decline: 1073741953",
+  "run_id": "20261108T180037477403Z",
+  "source_version": 6,
+  "started_at": "2026-11-08T18:00:37.477403+00:00",
+  "status": "failed"
+}
