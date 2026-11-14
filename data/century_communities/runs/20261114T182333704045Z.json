@@ -1,0 +1,9 @@
+{
+  "brand": "CCS",
+  "date": "2026-11-14",
+  "error": "HealthError: Multiple SKUs for the same address; identity review required",
+  "run_id": "20261114T182333704045Z",
+  "source_version": 6,
+  "started_at": "2026-11-14T18:23:33.704045+00:00",
+  "status": "failed"
+}
