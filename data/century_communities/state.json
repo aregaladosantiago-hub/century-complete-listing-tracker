@@ -1186,6 +1186,15 @@
       "removal_asp": "",
       "removed": "",
       "scrape_status": "failed"
+    },
+    {
+      "active": "",
+      "added": "",
+      "date": "2026-11-16",
+      "net_change": "",
+      "removal_asp": "",
+      "removed": "",
+      "scrape_status": "failed"
     }
   ],
   "events": [
@@ -705605,6 +705614,17 @@
       "removed": 67,
       "status": "closed_incomplete",
       "week": "Week 4"
+    },
+    {
+      "active": 1693,
+      "added": 153,
+      "net_change": -9,
+      "period_end": "2026-11-15",
+      "period_start": "2026-11-09",
+      "removal_asp": "468206.63",
+      "removed": 162,
+      "status": "closed_incomplete",
+      "week": "Week 5"
     }
   ]
 }
