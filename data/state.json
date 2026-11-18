@@ -938,6 +938,15 @@
       "removal_asp": "279649.20",
       "removed": 10,
       "scrape_status": "success"
+    },
+    {
+      "active": "",
+      "added": "",
+      "date": "2026-11-18",
+      "net_change": "",
+      "removal_asp": "",
+      "removed": "",
+      "scrape_status": "failed"
     }
   ],
   "events": [
