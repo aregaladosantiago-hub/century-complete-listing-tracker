@@ -1217,6 +1217,15 @@
       "removal_asp": "423913.04",
       "removed": 107,
       "scrape_status": "success"
+    },
+    {
+      "active": "",
+      "added": "",
+      "date": "2026-11-19",
+      "net_change": "",
+      "removal_asp": "",
+      "removed": "",
+      "scrape_status": "failed"
     }
   ],
   "events": [
