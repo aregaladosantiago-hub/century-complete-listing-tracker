@@ -1,0 +1,9 @@
+{
+  "brand": "CCS",
+  "date": "2026-11-20",
+  "error": "HealthError: Unrecognized empty community page: The Village at Landmark",
+  "run_id": "20261120T203855402597Z",
+  "source_version": 6,
+  "started_at": "2026-11-20T20:38:55.402597+00:00",
+  "status": "failed"
+}
