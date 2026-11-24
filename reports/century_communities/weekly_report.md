@@ -1,6 +1,6 @@
 # Century Communities Listing Flow Tracker
 
-Last successful observation: 2026-11-18. Report as of 2026-11-22.
+Last successful observation: 2026-11-18. Report as of 2026-11-23.
 
 | Week | Period | Active | Added | Removed | Net Change | Removal ASP |
 |---|---|---:|---:|---:|---:|---:|
@@ -10,6 +10,7 @@ Last successful observation: 2026-11-18. Report as of 2026-11-22.
 | Week 4 | 2026-11-02 to 2026-11-08 | 1702 | 69 | 67 | 2 | $452,372.81 |
 | Week 5 | 2026-11-09 to 2026-11-15 | 1693 | 153 | 162 | -9 | $468,206.63 |
 | Week 6 | 2026-11-16 to 2026-11-22 | 1721 | 135 | 107 | 28 | $423,913.04 |
+| Week 7 | 2026-11-23 to 2026-11-29 | — | — | — | — | — |
 
 The final row is the current fixed week. Blank movement means no comparable observation. See CSV status for incomplete closed periods.
 Active includes homes awaiting a second successful absence confirmation. Removed homes are an order proxy; Removal ASP is an advertised-price proxy.
